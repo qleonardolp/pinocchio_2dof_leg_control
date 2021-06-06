@@ -79,10 +79,12 @@ viz.sceneName = "Double Pendulum Leg"
 q0 = pin.neutral(model)
 viz.display(q0)
 
+show_plots = True
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
 sim_duration = 7  # simulation time period in sec
+step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 
 # Model properties
@@ -93,26 +95,28 @@ model.friction = np.array([0.0, 30.0])
 print("model damping: " + str(model.friction))
 
 # Controller (PD):
-ctrl_type = 'pdg'
-Kp = np.eye(model.nv) * 125
-Kd = np.eye(model.nv) * 18
+ctrl_type = 'id'
+Kp = np.eye(model.nv) * 400
+Kd = np.eye(model.nv) * 30
 if ctrl_type == 'id':
-    Kp = 0.18 * Kp
-    Kd = 0.44 * Kd
+    Kp[1][1] = 0.25 * Kp[1][1]
+    Kd[1][1] = 0.30 * Kd[1][1]
 # print(Kp)
 # Input
 input_type = 'sin'
-freqs = np.array([.0, 0.8])
-amps  = np.array([0.2, 0.1])
+freqs = np.array([0.8, 0.5])
+amps  = np.array([1.1, 0.15])
+phs   = np.array([-pi*(40/180), .0*pi*(80/180)])
+ampsxfreqs = np.multiply(amps, freqs)
 
 # Desired states variables
-q_des = np.array([pi * (178 / 180), pi * (90 / 180)])
-dq_des = np.zeros(model.nv)
-ddq_des = np.ones(model.nv) * 0.1
+q_des   = np.array([pi * (178 / 180), pi * (90 / 180)])
+dq_des  = np.zeros(model.nv)
+ddq_des = np.zeros(model.nv)
 
 # q = pin.randomConfiguration(model)
 # Initial states, q0, dq0
-q = np.array([pi * (135 / 180), pi * (15 / 180)])
+q = np.array([pi * (145 / 180), pi * (5 / 180)])
 dq = np.zeros(model.nv)
 q0 = q
 dq0 = dq
@@ -122,9 +126,13 @@ ddq_last = dq_last.copy()
 
 # Logging variables
 downsmpl_log = 0
-q_log = np.empty([1, 1 + model.nq]) * nan
-dq_log = q_log.copy()
+downsmpl_factor = 4
+q_log   = np.empty([1, 1 + model.nq]) * nan
+dq_log  = q_log.copy()
 ddq_log = q_log.copy()
+qdes_log   = np.empty([1, model.nq]) * nan
+dqdes_log  = qdes_log.copy()
+ddqdes_log = qdes_log.copy()
 
 data_sim = model.createData()
 t = 0.00
@@ -137,12 +145,18 @@ for k in range(sim_steps):
     hq = data_sim.C
     grav = data_sim.g
 
-    # Step reference at t=9s
-    # if t > 3.0:
-    #    q_des = np.array([math.pi*(80/180), math.pi*(65/180)])
-
-    # Oscillatory reference
-    q_des = q0 + np.array([0.02 * sin(2 * 3.1415 * 0.0 * t), .2 * sin(2 * 3.1415 * 0.8 * t)])
+    if input_type == 'stp':  # Step reference
+        if t > step_input_time:
+            q_des   = np.array([pi*(80/180), pi*(65/180)])
+            dq_des  = [0, 0]
+            ddq_des = [0, 0]
+    if input_type == 'sin':  # Oscillatory reference
+        q_des   = q0 + np.array([amps[0] * sin(2*pi*freqs[0] * t + phs[0]),
+                                 amps[1] * sin(2*pi*freqs[1] * t + phs[1])])
+        dq_des  = 2*pi * np.array([ampsxfreqs[0] * cos(2 * pi * freqs[0] * t),
+                                  ampsxfreqs[1] * cos(2 * pi * freqs[1] * t)])
+        ddq_des = -(2*pi)**2 * np.array([ampsxfreqs[0]*freqs[0] * sin(2 * pi * freqs[0] * t),
+                                         ampsxfreqs[1]*freqs[1] * sin(2 * pi * freqs[1] * t)])
 
     # PD Control
     if ctrl_type == 'pd':
@@ -157,7 +171,8 @@ for k in range(sim_steps):
     if ctrl_type == 'id':
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
 
-    ddq = pin.aba(model, data_sim, q, dq, tau_control)  # Forward dynamics
+    # Forward Dynamics (simulation)
+    ddq = pin.aba(model, data_sim, q, dq, tau_control)
 
     # Forward Euler Integration with Trapeziodal Rule
     dq += (ddq_last + ddq) * dt * 0.5
@@ -168,26 +183,45 @@ for k in range(sim_steps):
 
     # Log variables
     downsmpl_log += 1
-    if downsmpl_log > 1:
-        # q_log = np.vstack
+    if downsmpl_log > downsmpl_factor:
+        # States log
         q_log = np.vstack((q_log, [t, deg(q[0]), deg(q[1])]))
         dq_log = np.vstack((dq_log, [t, deg(dq[0]), deg(dq[1])]))
         ddq_log = np.vstack((ddq_log, [t, deg(ddq[0]), deg(ddq[1])]))
+        # Desired States log
+        qdes_log = np.vstack((qdes_log, [deg(q_des[0]), deg(q_des[1])]))
+        dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
+        ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
+
         downsmpl_log = 0
 
     viz.display(q)
     time.sleep(dt)
     t += dt
+# END OF SIMULATION
 
-# positions = data_sim.p
-# velocities = data_sim.v # works, why?
+if show_plots:
+    print("Simulation ended, here comes the plots...")
+    plt.figure()
+    plt.suptitle('Joint Positions')
+    plt.subplot(2,1,1)
+    plt.plot(q_log[:, 0], q_log[:, 1])
+    plt.plot(q_log[:, 0], qdes_log[:, 0])
+    plt.grid()
+    plt.subplot(2,1,2)
+    plt.plot(q_log[:, 0], q_log[:, 2])
+    plt.plot(q_log[:, 0], qdes_log[:, 1])
+    plt.grid()
+    plt.show()
 
-print("Simulation ended, here comes the plots...")
-plt.plot(q_log[:, 0], q_log[:, 1])
-plt.plot(q_log[:, 0], q_log[:, 2])
-plt.show()
+    plt.figure()
+    plt.suptitle('Joint Velocities')
+    plt.subplot(2,1,1)
+    plt.plot(dq_log[:, 0], dq_log[:, 1])
+    plt.grid()
+    plt.subplot(2,1,2)
+    plt.plot(dq_log[:, 0], dq_log[:, 2])
+    plt.grid()
+    plt.show()
 
-# plt.plot(dq_log[:,0], dq_log[:,1])
-# plt.plot(dq_log[:,0], dq_log[:,2])
-# plt.show()
 # FINALLY!!!
