@@ -88,26 +88,33 @@ step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 
 # Model properties
-model.lowerPositionLimit.fill(-pi)
-model.upperPositionLimit.fill(+pi)
-# model.damping = np.array([0.0, 30.0])
+#model.lowerPositionLimit.fill(-pi)
+#model.upperPositionLimit.fill(+pi)
+#model.damping = np.array([0.0, 30.0])
 model.friction = np.array([0.0, 30.0])
-print("model damping: " + str(model.friction))
+#print("model damping: " + str(model.friction))
 
 # Controller (PD):
 ctrl_type = 'id'
-Kp = np.eye(model.nv) * 400
-Kd = np.eye(model.nv) * 30
+Kp = np.eye(model.nv) * 380.0
+Kd = np.eye(model.nv) * 30.0
+# ganhos grandes tem sido limitados na simulacao.
+# Ha alguma limtacao no tau_control
+# investigar isso!
 if ctrl_type == 'id':
-    Kp[1][1] = 0.25 * Kp[1][1]
-    Kd[1][1] = 0.30 * Kd[1][1]
-# print(Kp)
+    Kp[1,1] *= 0.25
+    Kd[1,1] *= 0.30
+print(Kp)
+
 # Input
 input_type = 'sin'
-freqs = np.array([0.8, 0.5])
-amps  = np.array([1.1, 0.15])
-phs   = np.array([-pi*(40/180), .0*pi*(80/180)])
+freqs = np.array([0.8, 0.4])
+amps  = np.array([0.9, 0.3])
+phs   = np.array([-pi*(90/180), .0*pi*(80/180)])
 ampsxfreqs = np.multiply(amps, freqs)
+#print(ampsxfreqs)
+
+# SEPARAR SCRIPT AQUI...
 
 # Desired states variables
 q_des   = np.array([pi * (178 / 180), pi * (90 / 180)])
@@ -116,10 +123,11 @@ ddq_des = np.zeros(model.nv)
 
 # q = pin.randomConfiguration(model)
 # Initial states, q0, dq0
-q = np.array([pi * (145 / 180), pi * (5 / 180)])
+q = np.array([pi * (178 / 180), pi * (25 / 180)])
 dq = np.zeros(model.nv)
-q0 = q
-dq0 = dq
+q0 = q.copy()
+dq0 = 2*pi * np.array([ampsxfreqs[0],ampsxfreqs[1]])
+#print(q0)
 # Auxiliar state variables for integration
 dq_last = np.zeros(model.nv)
 ddq_last = dq_last.copy()
@@ -139,7 +147,6 @@ t = 0.00
 # SIMULATION:
 for k in range(sim_steps):
 
-    tau_control = np.zeros((model.nv))
     pin.computeAllTerms(model, data_sim, q, dq)
     Mq = data_sim.M
     hq = data_sim.C
@@ -158,6 +165,7 @@ for k in range(sim_steps):
         ddq_des = -(2*pi)**2 * np.array([ampsxfreqs[0]*freqs[0] * sin(2 * pi * freqs[0] * t),
                                          ampsxfreqs[1]*freqs[1] * sin(2 * pi * freqs[1] * t)])
 
+    tau_control = np.zeros((model.nv))
     # PD Control
     if ctrl_type == 'pd':
         tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq)
@@ -176,9 +184,9 @@ for k in range(sim_steps):
 
     # Forward Euler Integration with Trapeziodal Rule
     dq += (ddq_last + ddq) * dt * 0.5
-    ddq_last = ddq
+    ddq_last = ddq.copy()
     q += (dq_last + dq) * dt * 0.5
-    dq_last = dq
+    dq_last = dq.copy()
     # q = pin.integrate(model,q,dq*dt)
 
     # Log variables
@@ -207,10 +215,12 @@ if show_plots:
     plt.subplot(2,1,1)
     plt.plot(q_log[:, 0], q_log[:, 1])
     plt.plot(q_log[:, 0], qdes_log[:, 0])
+    plt.plot(q_log[:, 0], deg(q0[0])*np.ones(q_log.shape))
     plt.grid()
     plt.subplot(2,1,2)
     plt.plot(q_log[:, 0], q_log[:, 2])
     plt.plot(q_log[:, 0], qdes_log[:, 1])
+    plt.plot(q_log[:, 0], deg(q0[1])*np.ones(q_log.shape))
     plt.grid()
     plt.show()
 
@@ -218,9 +228,11 @@ if show_plots:
     plt.suptitle('Joint Velocities')
     plt.subplot(2,1,1)
     plt.plot(dq_log[:, 0], dq_log[:, 1])
+    plt.plot(q_log[:, 0], dqdes_log[:, 0])
     plt.grid()
     plt.subplot(2,1,2)
     plt.plot(dq_log[:, 0], dq_log[:, 2])
+    plt.plot(q_log[:, 0], dqdes_log[:, 1])
     plt.grid()
     plt.show()
 
