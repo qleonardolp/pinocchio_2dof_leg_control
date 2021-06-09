@@ -5,167 +5,92 @@ import matplotlib.pyplot as plt
 from math import *
 import time
 import sys
+import config_double_pendulum as conf
 
 
 def deg(arg):
     return degrees(arg)
 
 
-DoF = 2  # number of pendulums
-model = pin.Model()
-geom_model = pin.GeometryModel()
+# endof deg
 
-parent_id = 0
-joint_placement = pin.SE3.Identity()
-body_mass = 3.50
-body_radius = 0.1
-
-shape0 = fcl.Sphere(body_radius)
-geom0_obj = pin.GeometryObject("base", 0, shape0, pin.SE3.Identity())
-geom0_obj.meshColor = np.array([1., 0.2, 0.8, 1.0])
-geom_model.addGeometryObject(geom0_obj)
-
-# Model geometry construction:
-for k in range(DoF):
-    joint_name = "joint_" + str(k + 1)
-    joint_id = model.addJoint(parent_id, pin.JointModelRY(), joint_placement, joint_name)
-
-    den = k + 1.0
-    body_inertia = pin.Inertia.FromSphere(body_mass / den, body_radius)  # second link with less inertia
-    body_placement = joint_placement.copy()
-    body_placement.translation[2] = 1.
-    model.appendBodyToJoint(joint_id, body_inertia, body_placement)
-
-    geom1_name = "ball_" + str(k + 1)
-    shape1 = fcl.Sphere(body_radius)
-    geom1_obj = pin.GeometryObject(geom1_name, joint_id, shape1, body_placement)
-    geom1_obj.meshColor = np.ones((4))
-    geom_model.addGeometryObject(geom1_obj)
-
-    geom2_name = "bar_" + str(k + 1)
-    shape2 = fcl.Cylinder(body_radius / 4., body_placement.translation[2])
-    shape2_placement = body_placement.copy()
-    shape2_placement.translation[2] /= 2.
-
-    geom2_obj = pin.GeometryObject(geom2_name, joint_id, shape2, shape2_placement)
-    geom2_obj.meshColor = np.array([0., 0., 0., 1.])
-    geom_model.addGeometryObject(geom2_obj)
-
-    parent_id = joint_id
-    joint_placement = body_placement.copy()
-
-from pinocchio.visualize import GepettoVisualizer
-
-visual_model = geom_model
-viz = GepettoVisualizer(model, geom_model, visual_model)
-
-# Initialize the viewer.
-try:
-    viz.initViewer()
-except ImportError as err:
-    print("Error while initializing the viewer. It seems you should install gepetto-viewer")
-    print(err)
-    sys.exit(0)
-
-try:
-    viz.loadViewerModel("pinocchio")
-except AttributeError as err:
-    print("Error while loading the viewer model. It seems you should start gepetto-viewer")
-    print(err)
-    sys.exit(0)
-
-viz.sceneName = "Double Pendulum Leg"
-# Display a robot configuration.
-q0 = pin.neutral(model)
-viz.display(q0)
-
-show_plots = True
-# Simulation Config:
-dt = 0.001  # running simulation at 1000 Hz
-dt = 0.008
-sim_duration = 7  # simulation time period in sec
-step_input_time = sim_duration/2
-sim_steps = floor(sim_duration / dt)
-
-# Model properties
-#model.lowerPositionLimit.fill(-pi)
-#model.upperPositionLimit.fill(+pi)
-#model.damping = np.array([0.0, 30.0])
-model.friction = np.array([0.0, 30.0])
-#print("model damping: " + str(model.friction))
+show_plots = False
 
 # Controller (PD):
 ctrl_type = 'id'
-Kp = np.eye(model.nv) * 380.0
-Kd = np.eye(model.nv) * 30.0
-# ganhos grandes tem sido limitados na simulacao.
-# Ha alguma limtacao no tau_control
-# investigar isso!
+Kp = np.eye(conf.Model.nv) * 380.0
+Kd = np.eye(conf.Model.nv) * 35.0
+# sem limitacoes de tau, o problema era a phs
 if ctrl_type == 'id':
-    Kp[1,1] *= 0.25
-    Kd[1,1] *= 0.30
-print(Kp)
+    Kp[1, 1] *= 0.25
+    Kd[1, 1] *= 0.30
+#print(Kp)
 
 # Input
 input_type = 'sin'
-freqs = np.array([0.8, 0.4])
-amps  = np.array([0.9, 0.3])
-phs   = np.array([-pi*(90/180), .0*pi*(80/180)])
+freqs = np.array([0.45, 0.4])
+amps = np.array([0.85, 0.3])
+phs = np.array([-.0 * pi * (90 / 180), .0 * pi * (25 / 180)])
 ampsxfreqs = np.multiply(amps, freqs)
-#print(ampsxfreqs)
-
-# SEPARAR SCRIPT AQUI...
+# print(ampsxfreqs)
 
 # Desired states variables
-q_des   = np.array([pi * (178 / 180), pi * (90 / 180)])
-dq_des  = np.zeros(model.nv)
-ddq_des = np.zeros(model.nv)
+q_des = np.array([pi * (178 / 180), pi * (90 / 180)])
+dq_des = np.zeros(conf.Model.nv)
+ddq_des = np.zeros(conf.Model.nv)
 
-# q = pin.randomConfiguration(model)
+# q = pin.randomConfiguration(conf.Model)
 # Initial states, q0, dq0
-q = np.array([pi * (178 / 180), pi * (25 / 180)])
-dq = np.zeros(model.nv)
+q = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
+dq = np.zeros(conf.Model.nv)
 q0 = q.copy()
-dq0 = 2*pi * np.array([ampsxfreqs[0],ampsxfreqs[1]])
-#print(q0)
+dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
+# print(q0)
 # Auxiliar state variables for integration
-dq_last = np.zeros(model.nv)
+dq_last = np.zeros(conf.Model.nv)
 ddq_last = dq_last.copy()
 
 # Logging variables
 downsmpl_log = 0
 downsmpl_factor = 4
-q_log   = np.empty([1, 1 + model.nq]) * nan
-dq_log  = q_log.copy()
+q_log = np.empty([1, 1 + conf.Model.nq]) * nan
+dq_log = q_log.copy()
 ddq_log = q_log.copy()
-qdes_log   = np.empty([1, model.nq]) * nan
-dqdes_log  = qdes_log.copy()
+qdes_log = np.empty([1, conf.Model.nq]) * nan
+dqdes_log = qdes_log.copy()
 ddqdes_log = qdes_log.copy()
 
-data_sim = model.createData()
+p_log = np.empty([1, 2*(conf.Model.nq)]) * nan
+
+data_sim = conf.Model.createData()
+
+#print(conf.Model.getFrameId('bar_1'))
+#base_frame = conf.Model.frames[0]
+#print(base_frame)
+
 t = 0.00
 # SIMULATION:
-for k in range(sim_steps):
+for k in range(conf.sim_steps):
 
-    pin.computeAllTerms(model, data_sim, q, dq)
+    pin.computeAllTerms(conf.Model, data_sim, q, dq)
     Mq = data_sim.M
     hq = data_sim.C
     grav = data_sim.g
 
     if input_type == 'stp':  # Step reference
-        if t > step_input_time:
-            q_des   = np.array([pi*(80/180), pi*(65/180)])
-            dq_des  = [0, 0]
+        if t > conf.step_input_time:
+            q_des = np.array([pi * (80 / 180), pi * (65 / 180)])
+            dq_des = [0, 0]
             ddq_des = [0, 0]
     if input_type == 'sin':  # Oscillatory reference
-        q_des   = q0 + np.array([amps[0] * sin(2*pi*freqs[0] * t + phs[0]),
-                                 amps[1] * sin(2*pi*freqs[1] * t + phs[1])])
-        dq_des  = 2*pi * np.array([ampsxfreqs[0] * cos(2 * pi * freqs[0] * t),
-                                  ampsxfreqs[1] * cos(2 * pi * freqs[1] * t)])
-        ddq_des = -(2*pi)**2 * np.array([ampsxfreqs[0]*freqs[0] * sin(2 * pi * freqs[0] * t),
-                                         ampsxfreqs[1]*freqs[1] * sin(2 * pi * freqs[1] * t)])
+        q_des = q0 + np.array([amps[0] * sin(2 * pi * freqs[0] * t + phs[0]),
+                               amps[1] * sin(2 * pi * freqs[1] * t + phs[1])])
+        dq_des = 2 * pi * np.array([ampsxfreqs[0] * cos(2 * pi * freqs[0] * t),
+                                    ampsxfreqs[1] * cos(2 * pi * freqs[1] * t)])
+        ddq_des = -(2 * pi) ** 2 * np.array([ampsxfreqs[0] * freqs[0] * sin(2 * pi * freqs[0] * t),
+                                             ampsxfreqs[1] * freqs[1] * sin(2 * pi * freqs[1] * t)])
 
-    tau_control = np.zeros((model.nv))
+    tau_control = np.zeros((conf.Model.nv))
     # PD Control
     if ctrl_type == 'pd':
         tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq)
@@ -180,14 +105,22 @@ for k in range(sim_steps):
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
 
     # Forward Dynamics (simulation)
-    ddq = pin.aba(model, data_sim, q, dq, tau_control)
+    ddq = pin.aba(conf.Model, data_sim, q, dq, tau_control)
+
+    # Task Space
+    #pin.updateFramePlacements(conf.Model, data_sim)
+    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
+    # take first 3 rows of J6 cause we have a point contact (??)
+    J = J6[:3, :]
+    p = data_sim.oMi[2].translation
+    #print(str(p))
 
     # Forward Euler Integration with Trapeziodal Rule
-    dq += (ddq_last + ddq) * dt * 0.5
+    dq += (ddq_last + ddq) * conf.dt * 0.5
     ddq_last = ddq.copy()
-    q += (dq_last + dq) * dt * 0.5
+    q += (dq_last + dq) * conf.dt * 0.5
     dq_last = dq.copy()
-    # q = pin.integrate(model,q,dq*dt)
+    # q = pin.integrate(conf.Model,q,dq*dt)
 
     # Log variables
     downsmpl_log += 1
@@ -203,37 +136,38 @@ for k in range(sim_steps):
 
         downsmpl_log = 0
 
-    viz.display(q)
-    time.sleep(dt)
-    t += dt
+    conf.viz.display(q)
+    time.sleep(conf.dt)
+    t += conf.dt
 # END OF SIMULATION
 
 if show_plots:
     print("Simulation ended, here comes the plots...")
     plt.figure()
     plt.suptitle('Joint Positions')
-    plt.subplot(2,1,1)
+    plt.subplot(2, 1, 1)
     plt.plot(q_log[:, 0], q_log[:, 1])
     plt.plot(q_log[:, 0], qdes_log[:, 0])
-    plt.plot(q_log[:, 0], deg(q0[0])*np.ones(q_log.shape))
+    plt.plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
     plt.grid()
-    plt.subplot(2,1,2)
+    plt.subplot(2, 1, 2)
     plt.plot(q_log[:, 0], q_log[:, 2])
     plt.plot(q_log[:, 0], qdes_log[:, 1])
-    plt.plot(q_log[:, 0], deg(q0[1])*np.ones(q_log.shape))
+    plt.plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
     plt.grid()
     plt.show()
 
     plt.figure()
     plt.suptitle('Joint Velocities')
-    plt.subplot(2,1,1)
+    plt.subplot(2, 1, 1)
     plt.plot(dq_log[:, 0], dq_log[:, 1])
     plt.plot(q_log[:, 0], dqdes_log[:, 0])
     plt.grid()
-    plt.subplot(2,1,2)
+    plt.subplot(2, 1, 2)
     plt.plot(dq_log[:, 0], dq_log[:, 2])
     plt.plot(q_log[:, 0], dqdes_log[:, 1])
     plt.grid()
     plt.show()
+# endof plots
 
 # FINALLY!!!
