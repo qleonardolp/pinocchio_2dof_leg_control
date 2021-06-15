@@ -17,8 +17,8 @@ def deg(arg):
 
 show_plots = True
 
-# Controller (PD):
-ctrl_type = 'id'
+# Controller: # choose: pd | pdff | pdg | id | acc
+ctrl_type = 'acc'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 # sem limitacoes de tau, o problema era a phs
@@ -26,6 +26,9 @@ if ctrl_type == 'id':
     Kp[1, 1] *= 0.25
     Kd[1, 1] *= 0.30
 #print(Kp)
+# acceleration-based controller: PI(acc) -> PD(vel)
+velKp = np.eye(conf.Model.nv) * 200.0
+velKd = np.eye(conf.Model.nv) * 0.40
 
 # Input
 input_type = 'sin'
@@ -39,6 +42,9 @@ ampsxfreqs = np.multiply(amps, freqs)
 # Task Space Int Dyn
 tStiffness = np.array([20.0, .0, .0])  # N/m
 tDamping   = np.array([0.23, .0, .0])  # N.s/m
+# Joint Space Int Dyn
+jStiffness = np.eye(conf.Model.nv) * 10.40  # N/rad
+jDamping   = np.eye(conf.Model.nv) * 0.104  # N.s/rad
 
 # Desired states variables
 q_des = np.array([pi * (178 / 180), pi * (90 / 180)])
@@ -47,8 +53,9 @@ ddq_des = np.zeros(conf.Model.nv)
 
 # q = pin.randomConfiguration(conf.Model)
 # Initial states, q0, dq0
-q = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
-dq = np.zeros(conf.Model.nv)
+q   = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
+dq  = np.zeros(conf.Model.nv)
+ddq = np.zeros(conf.Model.nv)
 q0 = q.copy()
 dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
 # print(q0)
@@ -86,20 +93,7 @@ for k in range(conf.sim_steps):
     hq = data_sim.C
     grav = data_sim.g
 
-    # Task Space Interaction
-    #pin.updateFramePlacements(conf.Model, data_sim)  # already done in 'computeAllTerms'
-    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
-    # take first 3 rows of J6 cause we have a point contact (??)
-    J = J6[:3, :]
-    p = data_sim.oMi[2].translation
-    int_force = -np.multiply(tStiffness, p)
-    int_tau = J.transpose().dot(int_force)
-
-    #plt.plot(t, p[0])
-    #plt.draw()
-    #plt.pause(0.001)
-    print(int_tau)
-
+    # inputs
     if input_type == 'stp':  # Step reference
         if t > conf.step_input_time:
             q_des = np.array([pi * (80 / 180), pi * (65 / 180)])
@@ -112,6 +106,24 @@ for k in range(conf.sim_steps):
                                     ampsxfreqs[1] * cos(2 * pi * freqs[1] * t)])
         ddq_des = -(2 * pi) ** 2 * np.array([ampsxfreqs[0] * freqs[0] * sin(2 * pi * freqs[0] * t),
                                              ampsxfreqs[1] * freqs[1] * sin(2 * pi * freqs[1] * t)])
+    # endof inputs
+
+    # Task Space Interaction
+    #pin.updateFramePlacements(conf.Model, data_sim)  # already done in 'computeAllTerms'
+#    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
+#    # take first 3 rows of J6 cause we have a point contact (??)
+#    J = J6[:3, :]
+    p = data_sim.oMi[2].translation
+#    int_force = np.multiply(tStiffness, p)
+#    int_tau = J.transpose().dot(int_force)  # tau = J^T x F
+    # Joint Space Int
+    int_tau = jStiffness.dot(q_des - q)
+
+    #plt.plot(t, p[0])
+    #plt.draw()
+    #plt.pause(0.001)
+    #print(int_tau)
+
 
     tau_control = np.zeros((conf.Model.nv))
     # PD Control
@@ -126,6 +138,8 @@ for k in range(conf.sim_steps):
     # Inverse Dynamics Control, data_sim.nle contains C + g
     if ctrl_type == 'id':
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
+    if ctrl_type == 'acc':
+        tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
 
     # Forward Dynamics (simulation)
     ddq = pin.aba(conf.Model, data_sim, q, dq, tau_control + int_tau)
@@ -149,7 +163,8 @@ for k in range(conf.sim_steps):
         dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
         ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
 
-        p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
+        #p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
+        p_log = np.vstack((p_log, [p[0], int_tau[1], p[0], p[2]]))
 
         downsmpl_log = 0
     # endof logging
@@ -160,7 +175,7 @@ for k in range(conf.sim_steps):
 # END OF SIMULATION
 
 plt.figure()
-plt.plot(p_log[:, 0], p_log[:, 1])
+plt.plot(q_log[:, 0], p_log[:, 1])
 plt.grid()
 plt.show()
 
