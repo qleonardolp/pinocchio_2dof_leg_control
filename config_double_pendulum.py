@@ -1,7 +1,6 @@
 import pinocchio as pin
 import hppfcl as fcl
 import numpy as np
-import matplotlib.pyplot as plt
 from math import *
 import time
 import sys
@@ -79,7 +78,7 @@ viz.sceneName = "Double Pendulum Leg"
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
-sim_duration = 7  # simulation time period in sec
+sim_duration = 4  # simulation time period in sec
 step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 

@@ -1,3 +1,4 @@
+import numpy
 import pinocchio as pin
 import hppfcl as fcl
 import numpy as np
@@ -14,7 +15,7 @@ def deg(arg):
 
 # endof deg
 
-show_plots = False
+show_plots = True
 
 # Controller (PD):
 ctrl_type = 'id'
@@ -29,10 +30,15 @@ if ctrl_type == 'id':
 # Input
 input_type = 'sin'
 freqs = np.array([0.45, 0.4])
-amps = np.array([0.85, 0.3])
+amps = np.array([0.8, 0.3])
 phs = np.array([-.0 * pi * (90 / 180), .0 * pi * (25 / 180)])
 ampsxfreqs = np.multiply(amps, freqs)
 # print(ampsxfreqs)
+
+# Environment Interaction
+# Task Space Int Dyn
+tStiffness = np.array([20.0, .0, .0])  # N/m
+tDamping   = np.array([0.23, .0, .0])  # N.s/m
 
 # Desired states variables
 q_des = np.array([pi * (178 / 180), pi * (90 / 180)])
@@ -68,6 +74,9 @@ data_sim = conf.Model.createData()
 #base_frame = conf.Model.frames[0]
 #print(base_frame)
 
+#plt.figure()
+#plt.draw()
+
 t = 0.00
 # SIMULATION:
 for k in range(conf.sim_steps):
@@ -76,6 +85,20 @@ for k in range(conf.sim_steps):
     Mq = data_sim.M
     hq = data_sim.C
     grav = data_sim.g
+
+    # Task Space Interaction
+    #pin.updateFramePlacements(conf.Model, data_sim)  # already done in 'computeAllTerms'
+    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
+    # take first 3 rows of J6 cause we have a point contact (??)
+    J = J6[:3, :]
+    p = data_sim.oMi[2].translation
+    int_force = -np.multiply(tStiffness, p)
+    int_tau = J.transpose().dot(int_force)
+
+    #plt.plot(t, p[0])
+    #plt.draw()
+    #plt.pause(0.001)
+    print(int_tau)
 
     if input_type == 'stp':  # Step reference
         if t > conf.step_input_time:
@@ -105,15 +128,7 @@ for k in range(conf.sim_steps):
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
 
     # Forward Dynamics (simulation)
-    ddq = pin.aba(conf.Model, data_sim, q, dq, tau_control)
-
-    # Task Space
-    #pin.updateFramePlacements(conf.Model, data_sim)
-    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
-    # take first 3 rows of J6 cause we have a point contact (??)
-    J = J6[:3, :]
-    p = data_sim.oMi[2].translation
-    #print(str(p))
+    ddq = pin.aba(conf.Model, data_sim, q, dq, tau_control + int_tau)
 
     # Forward Euler Integration with Trapeziodal Rule
     dq += (ddq_last + ddq) * conf.dt * 0.5
@@ -134,12 +149,20 @@ for k in range(conf.sim_steps):
         dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
         ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
 
+        p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
+
         downsmpl_log = 0
+    # endof logging
 
     conf.viz.display(q)
     time.sleep(conf.dt)
     t += conf.dt
 # END OF SIMULATION
+
+plt.figure()
+plt.plot(p_log[:, 0], p_log[:, 1])
+plt.grid()
+plt.show()
 
 if show_plots:
     print("Simulation ended, here comes the plots...")
