@@ -13,6 +13,10 @@ def deg(arg):
     return degrees(arg)
 
 
+def saturation(val,lmt):
+    return max(min(val, lmt), -lmt)
+
+
 # endof deg
 
 show_plots = True
@@ -21,13 +25,13 @@ show_plots = True
 ctrl_type = 'acc'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
-# sem limitacoes de tau, o problema era a phs
+
 if ctrl_type == 'id':
     Kp[1, 1] *= 0.25
     Kd[1, 1] *= 0.30
-#print(Kp)
+# print(Kp)
 # acceleration-based controller: PI(acc) -> PD(vel)
-velKp = np.eye(conf.Model.nv) * 200.0
+velKp = np.array([[240, 0], [0, 200]])
 velKd = np.eye(conf.Model.nv) * 0.40
 
 # Input
@@ -41,10 +45,12 @@ ampsxfreqs = np.multiply(amps, freqs)
 # Environment Interaction
 # Task Space Int Dyn
 tStiffness = np.array([20.0, .0, .0])  # N/m
-tDamping   = np.array([0.23, .0, .0])  # N.s/m
+tDamping = np.array([0.23, .0, .0])  # N.s/m
 # Joint Space Int Dyn
 jStiffness = np.eye(conf.Model.nv) * 10.40  # N/rad
-jDamping   = np.eye(conf.Model.nv) * 0.104  # N.s/rad
+jDamping = np.eye(conf.Model.nv) * 0.104  # N.s/rad
+Ksea = np.eye(conf.Model.nv) * 104.0  # N/rad
+SeaMax = 104.0 * pi * (7/180)
 
 # Desired states variables
 q_des = np.array([pi * (178 / 180), pi * (90 / 180)])
@@ -53,12 +59,13 @@ ddq_des = np.zeros(conf.Model.nv)
 
 # q = pin.randomConfiguration(conf.Model)
 # Initial states, q0, dq0
-q   = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
-dq  = np.zeros(conf.Model.nv)
+q = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
+dq = np.zeros(conf.Model.nv)
 ddq = np.zeros(conf.Model.nv)
 q0 = q.copy()
 dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
-# print(q0)
+q_rlx = np.array([pi, .0])
+
 # Auxiliar state variables for integration
 dq_last = np.zeros(conf.Model.nv)
 ddq_last = dq_last.copy()
@@ -73,16 +80,16 @@ qdes_log = np.empty([1, conf.Model.nq]) * nan
 dqdes_log = qdes_log.copy()
 ddqdes_log = qdes_log.copy()
 
-p_log = np.empty([1, 2*(conf.Model.nq)]) * nan
+p_log = np.empty([1, 2 * (conf.Model.nq)]) * nan
 
 data_sim = conf.Model.createData()
 
-#print(conf.Model.getFrameId('bar_1'))
-#base_frame = conf.Model.frames[0]
-#print(base_frame)
+# print(conf.Model.getFrameId('bar_1'))
+# base_frame = conf.Model.frames[0]
+# print(base_frame)
 
-#plt.figure()
-#plt.draw()
+# plt.figure()
+# plt.draw()
 
 t = 0.00
 # SIMULATION:
@@ -109,21 +116,26 @@ for k in range(conf.sim_steps):
     # endof inputs
 
     # Task Space Interaction
-    #pin.updateFramePlacements(conf.Model, data_sim)  # already done in 'computeAllTerms'
-#    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
-#    # take first 3 rows of J6 cause we have a point contact (??)
-#    J = J6[:3, :]
+    # pin.updateFramePlacements(conf.Model, data_sim)  # already done in 'computeAllTerms'
+    #    J6 = pin.getJointJacobian(conf.Model, data_sim, 2, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)
+    #    # take first 3 rows of J6 cause we have a point contact (??)
+    #    J = J6[:3, :]
     p = data_sim.oMi[2].translation
-#    int_force = np.multiply(tStiffness, p)
-#    int_tau = J.transpose().dot(int_force)  # tau = J^T x F
+    #    int_force = np.multiply(tStiffness, p)
+    #    int_tau = J.transpose().dot(int_force)  # tau = J^T x F
     # Joint Space Int
-    int_tau = jStiffness.dot(q_des - q)
+    tau_int = jStiffness.dot(q_des - q)
 
-    #plt.plot(t, p[0])
-    #plt.draw()
-    #plt.pause(0.001)
-    #print(int_tau)
+    # plt.plot(t, p[0])
+    # plt.draw()
+    # plt.pause(0.001)
+    # print(int_tau)
 
+    # SEA:
+    # tau_sea = Ksea.dot(q - q_rlx)  # ? or:
+    tau_sea = Ksea.dot(q_des - q)
+    tau_sea[0] = saturation(tau_sea[0], SeaMax)
+    tau_sea[1] = saturation(tau_sea[1], SeaMax)
 
     tau_control = np.zeros((conf.Model.nv))
     # PD Control
@@ -142,7 +154,8 @@ for k in range(conf.sim_steps):
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
 
     # Forward Dynamics (simulation)
-    ddq = pin.aba(conf.Model, data_sim, q, dq, tau_control + int_tau)
+    Tau = tau_int + tau_sea + tau_control
+    ddq = pin.aba(conf.Model, data_sim, q, dq, Tau)
 
     # Forward Euler Integration with Trapeziodal Rule
     dq += (ddq_last + ddq) * conf.dt * 0.5
@@ -163,8 +176,8 @@ for k in range(conf.sim_steps):
         dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
         ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
 
-        #p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
-        p_log = np.vstack((p_log, [p[0], int_tau[1], p[0], p[2]]))
+        # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
+        p_log = np.vstack((p_log, [p[0], tau_int[1], p[0], p[2]]))
 
         downsmpl_log = 0
     # endof logging
