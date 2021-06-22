@@ -13,7 +13,7 @@ def deg(arg):
     return degrees(arg)
 
 
-def saturation(val,lmt):
+def saturation(val, lmt):
     return max(min(val, lmt), -lmt)
 
 
@@ -21,8 +21,8 @@ def saturation(val,lmt):
 
 show_plots = True
 
-# Controller: # choose: pd | pdff | pdg | id | acc
-ctrl_type = 'acc'
+# Controller: # choose: pd | pdff | pdg | id | acc | imp
+ctrl_type = 'imp'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -31,8 +31,13 @@ if ctrl_type == 'id':
     Kd[1, 1] *= 0.30
 # print(Kp)
 # acceleration-based controller: PI(acc) -> PD(vel)
-velKp = np.array([[240, 0], [0, 200]])
-velKd = np.eye(conf.Model.nv) * 0.40
+velKp = np.array([[60, 0], [0, 40]])
+velKd = np.eye(conf.Model.nv) * 0.20
+
+# Impedance Controller:
+des_inertia = np.array([[0.2, 0], [0, 0.2]])
+des_damping = np.array([[12.0, 0], [0, 10.0]])
+des_stiffness = np.array([[14, 0], [0, 8]])
 
 # Input
 input_type = 'sin'
@@ -80,7 +85,7 @@ qdes_log = np.empty([1, conf.Model.nq]) * nan
 dqdes_log = qdes_log.copy()
 ddqdes_log = qdes_log.copy()
 
-p_log = np.empty([1, 2 * (conf.Model.nq)]) * nan
+p_log = np.empty([1, 2 * conf.Model.nq]) * nan
 
 data_sim = conf.Model.createData()
 
@@ -91,10 +96,34 @@ data_sim = conf.Model.createData()
 # plt.figure()
 # plt.draw()
 
+# Create oscillatory reference data before simulation:
+for k in range(conf.sim_steps):
+    if input_type == 'sin':  # Oscillatory reference
+        t = k*conf.dt
+        q_des = q0 + np.array([amps[0] * sin(2 * pi * freqs[0] * t + phs[0]),
+                               amps[1] * sin(2 * pi * freqs[1] * t + phs[1])])
+        dq_des = 2 * pi * np.array([ampsxfreqs[0] * cos(2 * pi * freqs[0] * t),
+                                    ampsxfreqs[1] * cos(2 * pi * freqs[1] * t)])
+        ddq_des = -(2 * pi) ** 2 * np.array([ampsxfreqs[0] * freqs[0] * sin(2 * pi * freqs[0] * t),
+                                             ampsxfreqs[1] * freqs[1] * sin(2 * pi * freqs[1] * t)])
+    # endof if
+    # Log variables
+    downsmpl_log += 1
+    if downsmpl_log > downsmpl_factor and show_plots:
+        qdes_log = np.vstack((qdes_log, [deg(q_des[0]), deg(q_des[1])]))
+        dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
+        ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
+        downsmpl_log = 0
+# endof ref log
+
+
 t = 0.00
+tau_control = np.zeros(conf.Model.nv)
+
 # SIMULATION:
 for k in range(conf.sim_steps):
 
+    loop_tbegin = time.time()
     pin.computeAllTerms(conf.Model, data_sim, q, dq)
     Mq = data_sim.M
     hq = data_sim.C
@@ -137,7 +166,6 @@ for k in range(conf.sim_steps):
     tau_sea[0] = saturation(tau_sea[0], SeaMax)
     tau_sea[1] = saturation(tau_sea[1], SeaMax)
 
-    tau_control = np.zeros((conf.Model.nv))
     # PD Control
     if ctrl_type == 'pd':
         tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq)
@@ -152,29 +180,32 @@ for k in range(conf.sim_steps):
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
+    if ctrl_type == 'imp':
+        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + des_inertia.dot(ddq_des - ddq)\
+                      + Mq.dot(ddq_des) + data_sim.nle
 
     # Forward Dynamics (simulation)
-    Tau = tau_int + tau_sea + tau_control
+    # Tau = tau_int + tau_sea + tau_control
+    # Tau = tau_int + tau_control
+    Tau = tau_control
     ddq = pin.aba(conf.Model, data_sim, q, dq, Tau)
 
     # Forward Euler Integration with Trapeziodal Rule
-    dq += (ddq_last + ddq) * conf.dt * 0.5
-    ddq_last = ddq.copy()
-    q += (dq_last + dq) * conf.dt * 0.5
-    dq_last = dq.copy()
-    # q = pin.integrate(conf.Model,q,dq*dt)
+    #dq += (ddq_last + ddq) * conf.dt * 0.5
+    #ddq_last = ddq.copy()
+    #q += (dq_last + dq) * conf.dt * 0.5
+    #dq_last = dq.copy()
+
+    dq += ddq*conf.dt
+    q = pin.integrate(conf.Model, q, dq*conf.dt)
 
     # Log variables
     downsmpl_log += 1
-    if downsmpl_log > downsmpl_factor:
+    if downsmpl_log > downsmpl_factor and show_plots:
         # States log
         q_log = np.vstack((q_log, [t, deg(q[0]), deg(q[1])]))
         dq_log = np.vstack((dq_log, [t, deg(dq[0]), deg(dq[1])]))
         ddq_log = np.vstack((ddq_log, [t, deg(ddq[0]), deg(ddq[1])]))
-        # Desired States log
-        qdes_log = np.vstack((qdes_log, [deg(q_des[0]), deg(q_des[1])]))
-        dqdes_log = np.vstack((dqdes_log, [deg(dq_des[0]), deg(dq_des[1])]))
-        ddqdes_log = np.vstack((ddqdes_log, [deg(ddq_des[0]), deg(ddq_des[1])]))
 
         # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
         p_log = np.vstack((p_log, [p[0], tau_int[1], p[0], p[2]]))
@@ -183,7 +214,11 @@ for k in range(conf.sim_steps):
     # endof logging
 
     conf.viz.display(q)
-    time.sleep(conf.dt)
+    loop_tend = time.time()
+    ellapsed = loop_tend - loop_tbegin
+
+    sleep_dt = max(0, conf.dt - ellapsed)
+    time.sleep(sleep_dt)
     t += conf.dt
 # END OF SIMULATION
 
