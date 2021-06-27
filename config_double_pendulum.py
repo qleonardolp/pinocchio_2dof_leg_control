@@ -85,6 +85,5 @@ sim_steps = floor(sim_duration / dt)
 # Model properties
 #Model.lowerPositionLimit.fill(-pi)
 #Model.upperPositionLimit.fill(+pi)
-#Model.damping = np.array([0.0, 30.0])
-Model.friction = np.array([0.0, 30.0])
-#print("conf.Model damping: " + str(conf.Model.friction))
+#Model.damping = np.array([6.0, 30.0, 5.0, 5.]) # ???
+#Model.friction = np.array([0.0, 30.0])

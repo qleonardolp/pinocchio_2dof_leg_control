@@ -22,7 +22,7 @@ def saturation(val, lmt):
 show_plots = True
 
 # Controller: # choose: pd | pdff | pdg | id | acc | imp
-ctrl_type = 'imp'
+ctrl_type = 'nn'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -38,6 +38,9 @@ velKd = np.eye(conf.Model.nv) * 0.20
 des_inertia = np.array([[0.2, 0], [0, 0.2]])
 des_damping = np.array([[12.0, 0], [0, 10.0]])
 des_stiffness = np.array([[14, 0], [0, 8]])
+
+# Physical parameters
+jointsFriction = np.array([[1.1, 0], [0, 2.4]])
 
 # Input
 input_type = 'sin'
@@ -181,23 +184,27 @@ for k in range(conf.sim_steps):
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
     if ctrl_type == 'imp':
-        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + des_inertia.dot(ddq_des - ddq)\
+        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) \
                       + Mq.dot(ddq_des) + data_sim.nle
 
-    # Forward Dynamics (simulation)
+    # Joints Friction
+    tau_frict = jointsFriction.dot(dq) + 0.05*np.multiply(dq, dq)
     # Tau = tau_int + tau_sea + tau_control
     # Tau = tau_int + tau_control
-    Tau = tau_control
-    ddq = pin.aba(conf.Model, data_sim, q, dq, Tau)
+    Tau = tau_control - tau_frict
 
+    # Forward Dynamics (simulation)
+    ddq = pin.aba(conf.Model, data_sim, q, dq, Tau)
+    # Mq_inv = np.linalg.inv(Mq)
+    # ddq = Mq_inv.dot(- data_sim.nle)
+
+    dq += ddq*conf.dt
+    q = pin.integrate(conf.Model, q, dq*conf.dt)
     # Forward Euler Integration with Trapeziodal Rule
     #dq += (ddq_last + ddq) * conf.dt * 0.5
     #ddq_last = ddq.copy()
     #q += (dq_last + dq) * conf.dt * 0.5
     #dq_last = dq.copy()
-
-    dq += ddq*conf.dt
-    q = pin.integrate(conf.Model, q, dq*conf.dt)
 
     # Log variables
     downsmpl_log += 1
