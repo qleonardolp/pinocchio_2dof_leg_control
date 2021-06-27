@@ -19,10 +19,10 @@ def saturation(val, lmt):
 
 # endof deg
 
-show_plots = True
+show_plots = False
 
 # Controller: # choose: pd | pdff | pdg | id | acc | imp
-ctrl_type = 'nn'
+ctrl_type = 'imp'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -67,12 +67,17 @@ ddq_des = np.zeros(conf.Model.nv)
 
 # q = pin.randomConfiguration(conf.Model)
 # Initial states, q0, dq0
-q = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
-dq = np.zeros(conf.Model.nv)
+q   = np.array([pi * (178 / 180), pi * (25 / 180)]) + np.array([amps[0] * sin(phs[0]), amps[1] * sin(phs[1])])
+dq  = np.zeros(conf.Model.nv)
 ddq = np.zeros(conf.Model.nv)
-q0 = q.copy()
+q0  = q.copy()
 dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
 q_rlx = np.array([pi, .0])
+
+# Human states, "qh"
+qh   = q0.copy()
+dqh  = dq.copy()
+ddqh = ddq.copy()
 
 # Auxiliar state variables for integration
 dq_last = np.zeros(conf.Model.nv)
@@ -91,13 +96,10 @@ ddqdes_log = qdes_log.copy()
 p_log = np.empty([1, 2 * conf.Model.nq]) * nan
 
 data_sim = conf.Model.createData()
-
+data_hum = conf.humModel.createData()
 # print(conf.Model.getFrameId('bar_1'))
 # base_frame = conf.Model.frames[0]
 # print(base_frame)
-
-# plt.figure()
-# plt.draw()
 
 # Create oscillatory reference data before simulation:
 for k in range(conf.sim_steps):
@@ -128,6 +130,7 @@ for k in range(conf.sim_steps):
 
     loop_tbegin = time.time()
     pin.computeAllTerms(conf.Model, data_sim, q, dq)
+    pin.computeAllTerms(conf.humModel, data_hum, qh, dqh)
     Mq = data_sim.M
     hq = data_sim.C
     grav = data_sim.g
@@ -183,23 +186,28 @@ for k in range(conf.sim_steps):
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
-    if ctrl_type == 'imp':
+    if ctrl_type == 'imp': # corrigir... ver aula sobre Impedance
         tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) \
                       + Mq.dot(ddq_des) + data_sim.nle
 
     # Joints Friction
     tau_frict = jointsFriction.dot(dq) + 0.05*np.multiply(dq, dq)
+    tau_frict_h = jointsFriction.dot(dqh)
     # Tau = tau_int + tau_sea + tau_control
     # Tau = tau_int + tau_control
-    Tau = tau_control - tau_frict
+    Tau =  - tau_frict
+    Tau_h = np.array([.0, .0]) # modelo do hum está super lento, investigar!!
 
     # Forward Dynamics (simulation)
-    ddq = pin.aba(conf.Model, data_sim, q, dq, Tau)
+    ddq  = pin.aba(conf.Model, data_sim, q, dq, Tau)
+    ddqh = pin.aba(conf.humModel, data_hum, qh, dqh, Tau_h)
     # Mq_inv = np.linalg.inv(Mq)
     # ddq = Mq_inv.dot(- data_sim.nle)
 
     dq += ddq*conf.dt
     q = pin.integrate(conf.Model, q, dq*conf.dt)
+    dqh = ddqh*conf.dt
+    qh  = pin.integrate(conf.humModel, qh, dqh*conf.dt)
     # Forward Euler Integration with Trapeziodal Rule
     #dq += (ddq_last + ddq) * conf.dt * 0.5
     #ddq_last = ddq.copy()
@@ -221,10 +229,12 @@ for k in range(conf.sim_steps):
     # endof logging
 
     conf.viz.display(q)
+    conf.viz_hum.display(qh)
     loop_tend = time.time()
     ellapsed = loop_tend - loop_tbegin
 
     sleep_dt = max(0, conf.dt - ellapsed)
+    #print(sleep_dt)
     time.sleep(sleep_dt)
     t += conf.dt
 # END OF SIMULATION

@@ -51,20 +51,73 @@ for k in range(DoF):
 
     parent_id = joint_id
     joint_placement = body_placement.copy()
-
+# Add Gepetto handler
 visual_model = geom_model
 viz = GepettoVisualizer(Model, geom_model, visual_model)
+
+
+# Human Leg model:
+humModel = pin.Model()
+humGeom = pin.GeometryModel()
+
+parent_id = 0
+base_placement = pin.XYZQUATToSE3([.0, .23, .0, 1.0, .0, .0, .0])
+base_placement = pin.SE3.Identity()
+joint_placement = pin.SE3.Identity()
+body_mass = 3.00
+body_radius = 0.1
+
+shape0 = fcl.Sphere(body_radius)
+geom0_obj = pin.GeometryObject("base", 0, shape0, base_placement)
+geom0_obj.meshColor = np.array([1., 0.2, 0.8, .23])
+#geom0_obj.placement.translation[1] = .23
+humGeom.addGeometryObject(geom0_obj)
+
+# Model geometry construction:
+for k in range(DoF):
+    joint_name = "joint_" + str(k + 1)
+    joint_id = humModel.addJoint(parent_id, pin.JointModelRY(), joint_placement, joint_name)
+    #Model.addJointFrame(joint_id)
+
+    den = k + 1.0
+    body_inertia = pin.Inertia.FromSphere(body_mass / den, body_radius)  # second link with less inertia
+    body_placement = joint_placement.copy()
+    body_placement.translation[2] = 1.
+    humModel.appendBodyToJoint(joint_id, body_inertia, body_placement)
+
+    geom1_name = "ball_" + str(k + 1)
+    shape1 = fcl.Sphere(body_radius)
+    geom1_obj = pin.GeometryObject(geom1_name, joint_id, shape1, body_placement)
+    geom1_obj.meshColor = np.ones((4))
+    humGeom.addGeometryObject(geom1_obj)
+
+    geom2_name = "bar_" + str(k + 1)
+    shape2 = fcl.Cylinder(body_radius / 4., body_placement.translation[2])
+    shape2_placement = body_placement.copy()
+    shape2_placement.translation[2] /= 2.
+
+    geom2_obj = pin.GeometryObject(geom2_name, joint_id, shape2, shape2_placement)
+    geom2_obj.meshColor = np.array([0., 0., 0., .23])
+    humGeom.addGeometryObject(geom2_obj)
+
+    parent_id = joint_id
+    joint_placement = body_placement.copy()
+# Gepetto handler
+humVisual = humGeom
+viz_hum = GepettoVisualizer(humModel, humGeom, humVisual)
 
 # Initialize the viewer.
 try:
     viz.initViewer()
+    viz_hum.initViewer()
 except ImportError as err:
     print("Error while initializing the viewer. It seems you should install gepetto-viewer")
     print(err)
     sys.exit(0)
 
 try:
-    viz.loadViewerModel("pinocchio")
+    viz.loadViewerModel("robot")
+    viz_hum.loadViewerModel("human")
 except AttributeError as err:
     print("Error while loading the viewer model. It seems you should start gepetto-viewer")
     print(err)
@@ -78,11 +131,11 @@ viz.sceneName = "Double Pendulum Leg"
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
-sim_duration = 20  # simulation time period in sec
+sim_duration = 2  # simulation time period in sec
 step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 
-# Model properties
+# Model properties (show be set before Gepetto)
 #Model.lowerPositionLimit.fill(-pi)
 #Model.upperPositionLimit.fill(+pi)
 #Model.damping = np.array([6.0, 30.0, 5.0, 5.]) # ???
