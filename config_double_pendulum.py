@@ -64,8 +64,8 @@ parent_id = 0
 base_placement = pin.XYZQUATToSE3([.0, .23, .0, 1.0, .0, .0, .0])
 base_placement = pin.SE3.Identity()
 joint_placement = pin.SE3.Identity()
-body_mass = 3.00
-body_radius = 0.1
+body_mass = 2.00
+body_radius = 0.07
 
 shape0 = fcl.Sphere(body_radius)
 geom0_obj = pin.GeometryObject("base", 0, shape0, base_placement)
@@ -131,7 +131,7 @@ viz.sceneName = "Double Pendulum Leg"
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
-sim_duration = 2  # simulation time period in sec
+sim_duration = 9  # simulation time period in sec
 step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 

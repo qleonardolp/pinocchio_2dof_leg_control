@@ -19,7 +19,8 @@ def saturation(val, lmt):
 
 # endof deg
 
-show_plots = False
+show_plots = True
+interaction_enable = True
 
 # Controller: # choose: pd | pdff | pdg | id | acc | imp
 ctrl_type = 'imp'
@@ -36,8 +37,8 @@ velKd = np.eye(conf.Model.nv) * 0.20
 
 # Impedance Controller:
 des_inertia = np.array([[0.2, 0], [0, 0.2]])
-des_damping = np.array([[12.0, 0], [0, 10.0]])
-des_stiffness = np.array([[14, 0], [0, 8]])
+des_damping = np.array([[30., 0], [0, 90]])
+des_stiffness = np.array([[60, 0], [0, 180]])
 
 # Physical parameters
 jointsFriction = np.array([[1.1, 0], [0, 2.4]])
@@ -55,7 +56,7 @@ ampsxfreqs = np.multiply(amps, freqs)
 tStiffness = np.array([20.0, .0, .0])  # N/m
 tDamping = np.array([0.23, .0, .0])  # N.s/m
 # Joint Space Int Dyn
-jStiffness = np.eye(conf.Model.nv) * 10.40  # N/rad
+jStiffness = np.eye(conf.Model.nv) * 104. # N/rad
 jDamping = np.eye(conf.Model.nv) * 0.104  # N.s/rad
 Ksea = np.eye(conf.Model.nv) * 104.0  # N/rad
 SeaMax = 104.0 * pi * (7/180)
@@ -74,10 +75,12 @@ q0  = q.copy()
 dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
 q_rlx = np.array([pi, .0])
 
-# Human states, "qh"
-qh   = q0.copy()
-dqh  = dq.copy()
-ddqh = ddq.copy()
+# Human states, "qh", and properties (K, D)
+qh   = q0
+dqh  = np.zeros(conf.humModel.nv)
+ddqh = np.zeros(conf.humModel.nv)
+humStiffness = np.eye(conf.humModel.nv) * 850.0
+humDamping = np.eye(conf.humModel.nv) * 96.0
 
 # Auxiliar state variables for integration
 dq_last = np.zeros(conf.Model.nv)
@@ -92,6 +95,7 @@ ddq_log = q_log.copy()
 qdes_log = np.empty([1, conf.Model.nq]) * nan
 dqdes_log = qdes_log.copy()
 ddqdes_log = qdes_log.copy()
+humjstates_log = np.empty([1, 1 + 3*conf.humModel.nq]) * nan
 
 p_log = np.empty([1, 2 * conf.Model.nq]) * nan
 
@@ -129,11 +133,14 @@ tau_control = np.zeros(conf.Model.nv)
 for k in range(conf.sim_steps):
 
     loop_tbegin = time.time()
+    # Pinocchio Data for the Robot
     pin.computeAllTerms(conf.Model, data_sim, q, dq)
-    pin.computeAllTerms(conf.humModel, data_hum, qh, dqh)
     Mq = data_sim.M
     hq = data_sim.C
     grav = data_sim.g
+    # Pinocchio Data for the Human
+    pin.computeAllTerms(conf.humModel, data_hum, qh, dqh)
+    humMq = data_hum.M
 
     # inputs
     if input_type == 'stp':  # Step reference
@@ -158,13 +165,6 @@ for k in range(conf.sim_steps):
     p = data_sim.oMi[2].translation
     #    int_force = np.multiply(tStiffness, p)
     #    int_tau = J.transpose().dot(int_force)  # tau = J^T x F
-    # Joint Space Int
-    tau_int = jStiffness.dot(q_des - q)
-
-    # plt.plot(t, p[0])
-    # plt.draw()
-    # plt.pause(0.001)
-    # print(int_tau)
 
     # SEA:
     # tau_sea = Ksea.dot(q - q_rlx)  # ? or:
@@ -184,19 +184,30 @@ for k in range(conf.sim_steps):
     # Inverse Dynamics Control, data_sim.nle contains C + g
     if ctrl_type == 'id':
         tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
+    # Acceleration-based control
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
-    if ctrl_type == 'imp': # corrigir... ver aula sobre Impedance
-        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) \
-                      + Mq.dot(ddq_des) + data_sim.nle
+    # Impedance Control:
+    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control
+        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq)  + data_sim.nle
+
+    # -- Human Body Control: -- #
+    hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
 
     # Joints Friction
-    tau_frict = jointsFriction.dot(dq) + 0.05*np.multiply(dq, dq)
+    tau_frict = jointsFriction.dot(dq) #+ 0.05*np.multiply(dq, dq)
     tau_frict_h = jointsFriction.dot(dqh)
-    # Tau = tau_int + tau_sea + tau_control
-    # Tau = tau_int + tau_control
-    Tau =  - tau_frict
-    Tau_h = np.array([.0, .0]) # modelo do hum está super lento, investigar!!
+
+    # Joint Space Int - Human-Exo Interaction
+    tau_int = jStiffness.dot(qh - q)
+
+    # modelo do hum está super lento, investigar!!
+    if interaction_enable:
+        Tau   = tau_control - tau_frict + tau_int
+        Tau_h = hum_input - tau_int
+    else:
+        Tau = tau_control - tau_frict
+        Tau_h = hum_input
 
     # Forward Dynamics (simulation)
     ddq  = pin.aba(conf.Model, data_sim, q, dq, Tau)
@@ -217,13 +228,18 @@ for k in range(conf.sim_steps):
     # Log variables
     downsmpl_log += 1
     if downsmpl_log > downsmpl_factor and show_plots:
-        # States log
+        # Robot States log
         q_log = np.vstack((q_log, [t, deg(q[0]), deg(q[1])]))
         dq_log = np.vstack((dq_log, [t, deg(dq[0]), deg(dq[1])]))
         ddq_log = np.vstack((ddq_log, [t, deg(ddq[0]), deg(ddq[1])]))
 
-        # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]]))
-        p_log = np.vstack((p_log, [p[0], tau_int[1], p[0], p[2]]))
+        # human States log
+        humjstates_log = np.vstack((humjstates_log, [t, deg(qh[0]),   deg(qh[1]),\
+                                                        deg(dqh[0]),  deg(dqh[1]),\
+                                                        deg(ddqh[0]), deg(ddqh[1])]))
+
+        # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]])) # log x,z
+        p_log = np.vstack((p_log, [hum_input[0], hum_input[1], tau_control[0], tau_control[1]]))
 
         downsmpl_log = 0
     # endof logging
@@ -240,36 +256,57 @@ for k in range(conf.sim_steps):
 # END OF SIMULATION
 
 plt.figure()
-plt.plot(q_log[:, 0], p_log[:, 1])
+plt.plot(q_log[:, 0], p_log[:, 0])
+plt.plot(q_log[:, 0], p_log[:, 2])
 plt.grid()
 plt.show()
 
 if show_plots:
     print("Simulation ended, here comes the plots...")
-    plt.figure()
-    plt.suptitle('Joint Positions')
-    plt.subplot(2, 1, 1)
-    plt.plot(q_log[:, 0], q_log[:, 1])
-    plt.plot(q_log[:, 0], qdes_log[:, 0])
-    plt.plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
-    plt.grid()
-    plt.subplot(2, 1, 2)
-    plt.plot(q_log[:, 0], q_log[:, 2])
-    plt.plot(q_log[:, 0], qdes_log[:, 1])
-    plt.plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
-    plt.grid()
+    fig, axs = plt.subplots(2, 2)
+
+    axs[0, 0].set_title('Robot q (deg)')
+    axs[0, 0].plot(q_log[:, 0], q_log[:, 1])
+    axs[0, 0].plot(q_log[:, 0], qdes_log[:, 0])
+    axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
+    axs[0, 0].grid()
+
+    axs[1, 0].plot(q_log[:, 0], q_log[:, 2])
+    axs[1, 0].plot(q_log[:, 0], qdes_log[:, 1])
+    axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
+    axs[1, 0].grid()
+
+    axs[0, 1].set_title('Robot dq (deg/s)')
+    axs[0, 1].plot(dq_log[:, 0], dq_log[:, 1])
+    axs[0, 1].plot(q_log[:, 0], dqdes_log[:, 0])
+    axs[0, 1].grid()
+
+    axs[1, 1].plot(dq_log[:, 0], dq_log[:, 2])
+    axs[1, 1].plot(q_log[:, 0], dqdes_log[:, 1])
+    axs[1, 1].grid()
     plt.show()
 
-    plt.figure()
-    plt.suptitle('Joint Velocities')
-    plt.subplot(2, 1, 1)
-    plt.plot(dq_log[:, 0], dq_log[:, 1])
-    plt.plot(q_log[:, 0], dqdes_log[:, 0])
-    plt.grid()
-    plt.subplot(2, 1, 2)
-    plt.plot(dq_log[:, 0], dq_log[:, 2])
-    plt.plot(q_log[:, 0], dqdes_log[:, 1])
-    plt.grid()
+    fig, axs = plt.subplots(2, 2)
+
+    axs[0, 0].set_title('Human q (deg)')
+    axs[0, 0].plot(humjstates_log[:, 0], humjstates_log[:, 1])
+    axs[0, 0].plot(q_log[:, 0], qdes_log[:, 0])
+    axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
+    axs[0, 0].grid()
+
+    axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2])
+    axs[1, 0].plot(q_log[:, 0], qdes_log[:, 1])
+    axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
+    axs[1, 0].grid()
+
+    axs[0, 1].set_title('Human dq (deg/s)')
+    axs[0, 1].plot(humjstates_log[:, 0], humjstates_log[:, 3])
+    axs[0, 1].plot(q_log[:, 0], dqdes_log[:, 0])
+    axs[0, 1].grid()
+
+    axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4])
+    axs[1, 1].plot(q_log[:, 0], dqdes_log[:, 1])
+    axs[1, 1].grid()
     plt.show()
 # endof plots
 
