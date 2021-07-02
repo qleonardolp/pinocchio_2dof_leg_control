@@ -61,10 +61,12 @@ humModel = pin.Model()
 humGeom = pin.GeometryModel()
 
 parent_id = 0
-base_placement = pin.XYZQUATToSE3([.0, .23, .0, 1.0, .0, .0, .0])
+#base_placement = pin.XYZQUATToSE3([.0, .23, .0, 1.0, .0, .0, .0])
 base_placement = pin.SE3.Identity()
 joint_placement = pin.SE3.Identity()
-body_mass = 2.00
+# From "Adjustments to McConville et al. and Young et al. body segment inertial parameters"
+# Using 70 Kg Female adult, Thigh and Leg:
+body_mass = [0.146*70, 0.048*70]
 body_radius = 0.07
 
 shape0 = fcl.Sphere(body_radius)
@@ -79,8 +81,7 @@ for k in range(DoF):
     joint_id = humModel.addJoint(parent_id, pin.JointModelRY(), joint_placement, joint_name)
     #Model.addJointFrame(joint_id)
 
-    den = k + 1.0
-    body_inertia = pin.Inertia.FromSphere(body_mass / den, body_radius)  # second link with less inertia
+    body_inertia = pin.Inertia.FromSphere(body_mass[k], body_radius)  # second link with less inertia
     body_placement = joint_placement.copy()
     body_placement.translation[2] = 1.
     humModel.appendBodyToJoint(joint_id, body_inertia, body_placement)

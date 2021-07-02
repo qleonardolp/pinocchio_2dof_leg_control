@@ -3,9 +3,10 @@ import numpy as np
 from math import *
 import config_double_pendulum as conf
 
+# Main Parameters
 Romega = np.array([[1., .0], [.0, 1.]])
 Rpeaks = np.array([[.7, .0], [.0, .5]])
-Rdc    = np.array([[1.6, .0], [.0, 1.4]])
+Rdc    = np.array([[2.3, .0], [.0, 1.9]])
 
 # See toDynamicParameters() definition at
 # https://gepettoweb.laas.fr/doc/stack-of-tasks/pinocchio/master/doxygen-html/classpinocchio_1_1InertiaTpl.html

@@ -23,7 +23,7 @@ def saturation(val, lmt):
 show_plots = True
 interaction_enable = True
 
-# Controller: # choose: pd | pdff | pdg | id | acc | imp
+# Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC
 ctrl_type = 'imp'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
@@ -193,10 +193,13 @@ for k in range(conf.sim_steps):
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
     # Impedance Control:
-    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control .... talvez a referencia seja qh
-        tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq)  + data_sim.nle
+    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control ...
+        #tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + data_sim.nle
+        tau_control = des_stiffness.dot(qh - q) + des_damping.dot(dqh - dq) + data_sim.nle
+    # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
     if ctrl_type == 'kDC':
-        tau_control = AdmShaping.k_DC.dot(q) + data_sim.nle
+        #tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
+        tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
@@ -274,22 +277,24 @@ if show_plots:
 
     axs[0, 0].set_title('Robot q (deg)')
     axs[0, 0].plot(q_log[:, 0], q_log[:, 1])
-    axs[0, 0].plot(q_log[:, 0], qdes_log[:, 0])
+    axs[0, 0].plot(humjstates_log[:, 0], humjstates_log[:, 1])
     axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
     axs[0, 0].grid()
 
     axs[1, 0].plot(q_log[:, 0], q_log[:, 2])
-    axs[1, 0].plot(q_log[:, 0], qdes_log[:, 1])
+    axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2])
     axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
+    axs[1, 0].set_xlabel('time (s)')
     axs[1, 0].grid()
 
     axs[0, 1].set_title('Robot dq (deg/s)')
     axs[0, 1].plot(dq_log[:, 0], dq_log[:, 1])
-    axs[0, 1].plot(q_log[:, 0], dqdes_log[:, 0])
+    axs[0, 1].plot(humjstates_log[:, 0], humjstates_log[:, 3])
     axs[0, 1].grid()
 
     axs[1, 1].plot(dq_log[:, 0], dq_log[:, 2])
-    axs[1, 1].plot(q_log[:, 0], dqdes_log[:, 1])
+    axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4])
+    axs[1, 1].set_xlabel('time (s)')
     axs[1, 1].grid()
     plt.show()
 
@@ -304,6 +309,7 @@ if show_plots:
     axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2])
     axs[1, 0].plot(q_log[:, 0], qdes_log[:, 1])
     axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
+    axs[1, 0].set_xlabel('time (s)')
     axs[1, 0].grid()
 
     axs[0, 1].set_title('Human dq (deg/s)')
@@ -313,6 +319,7 @@ if show_plots:
 
     axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4])
     axs[1, 1].plot(q_log[:, 0], dqdes_log[:, 1])
+    axs[1, 1].set_xlabel('time (s)')
     axs[1, 1].grid()
     plt.show()
 # endof plots
