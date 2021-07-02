@@ -21,6 +21,7 @@ sqrtJK = np.sqrt(hum_inertia*hum_stiff)
 hum_zetas = hum_damp * (np.linalg.inv(2*sqrtJK))
 rho = Rdc * np.linalg.inv(Rpeaks) * hum_zetas * np.sqrt(np.eye(2) - hum_zetas*hum_zetas)
 
+# From equations (17) - (19):
 I_des = hum_inertia * np.linalg.inv(Rdc * Romega*Romega)
 omg_des = np.diag(Romega * hum_omega_n)
 zeta_des = np.sqrt( 0.5*np.eye(2) - 0.5*np.sqrt(np.eye(2) - 4*rho*rho) )
@@ -29,5 +30,12 @@ zeta_des = np.sqrt( 0.5*np.eye(2) - 0.5*np.sqrt(np.eye(2) - 4*rho*rho) )
 imp_kp = I_des * np.square(omg_des)
 imp_kd = I_des * (2 * zeta_des * omg_des)
 
-print(imp_kp)
-print(imp_kd)
+# Equation (36): stiffness and gravity compensation gain
+k_DC = hum_inertia * hum_omega_n*hum_omega_n * (np.linalg.inv(Rdc) - np.eye(2))
+thigh_jw = [ -(zeta_des*omg_des)[0, 0], omg_des[0]*sqrt(1 - zeta_des[0, 0]) ]
+shank_jw = [ -(zeta_des*omg_des)[1, 1], omg_des[1]*sqrt(1 - zeta_des[1, 1]) ]
+
+poles = np.array([np.complex(thigh_jw[0], thigh_jw[1]), \
+                  np.complex(shank_jw[0], shank_jw[1])])
+
+print("Poles: " + str(poles))

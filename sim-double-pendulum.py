@@ -193,8 +193,10 @@ for k in range(conf.sim_steps):
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
     # Impedance Control:
-    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control
+    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control .... talvez a referencia seja qh
         tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq)  + data_sim.nle
+    if ctrl_type == 'kDC':
+        tau_control = AdmShaping.k_DC.dot(q) + data_sim.nle
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
