@@ -7,6 +7,7 @@ from math import *
 import time
 import sys
 import config_double_pendulum as conf
+import config_admittance_shaping as AdmShaping
 
 
 def deg(arg):
@@ -39,6 +40,10 @@ velKd = np.eye(conf.Model.nv) * 0.20
 des_inertia = np.array([[0.2, 0], [0, 0.2]])
 des_damping = np.array([[30., 0], [0, 90]])
 des_stiffness = np.array([[60, 0], [0, 180]])
+# Admittance Shaping Controller
+des_inertia = AdmShaping.I_des
+des_damping = AdmShaping.imp_kd
+des_stiffness = AdmShaping.imp_kp
 
 # Physical parameters
 jointsFriction = np.array([[1.1, 0], [0, 2.4]])
@@ -79,8 +84,8 @@ q_rlx = np.array([pi, .0])
 qh   = q0
 dqh  = np.zeros(conf.humModel.nv)
 ddqh = np.zeros(conf.humModel.nv)
-humStiffness = np.eye(conf.humModel.nv) * 850.0
-humDamping = np.eye(conf.humModel.nv) * 96.0
+humStiffness = conf.humStiffness
+humDamping = conf.humDamping
 
 # Auxiliar state variables for integration
 dq_last = np.zeros(conf.Model.nv)
@@ -239,8 +244,8 @@ for k in range(conf.sim_steps):
                                                         deg(ddqh[0]), deg(ddqh[1])]))
 
         # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]])) # log x,z
-        p_log = np.vstack((p_log, [hum_input[0], hum_input[1], tau_control[0], tau_control[1]]))
-
+        p_log = np.vstack((p_log, [tau_int[0], hum_input[1], tau_control[0], tau_control[1]]))
+        #print(humMq)
         downsmpl_log = 0
     # endof logging
 
@@ -257,7 +262,7 @@ for k in range(conf.sim_steps):
 
 plt.figure()
 plt.plot(q_log[:, 0], p_log[:, 0])
-plt.plot(q_log[:, 0], p_log[:, 2])
+#plt.plot(q_log[:, 0], p_log[:, 2])
 plt.grid()
 plt.show()
 

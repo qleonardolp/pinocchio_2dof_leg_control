@@ -131,11 +131,14 @@ viz.sceneName = "Double Pendulum Leg"
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
-sim_duration = 9  # simulation time period in sec
+sim_duration = 4  # simulation time period in sec
 step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 
-# Model properties (show be set before Gepetto)
+humStiffness = np.eye(humModel.nv) * 850.0
+humDamping = np.eye(humModel.nv) * 9.0 # cuidado, nao pode ser muito alto.
+
+# Model properties (should be set before Gepetto)
 #Model.lowerPositionLimit.fill(-pi)
 #Model.upperPositionLimit.fill(+pi)
 #Model.damping = np.array([6.0, 30.0, 5.0, 5.]) # ???
