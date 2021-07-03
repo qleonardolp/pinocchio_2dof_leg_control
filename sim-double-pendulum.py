@@ -24,7 +24,7 @@ show_plots = True
 interaction_enable = True
 
 # Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC
-ctrl_type = 'imp'
+ctrl_type = 'Zf'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -200,6 +200,8 @@ for k in range(conf.sim_steps):
     if ctrl_type == 'kDC':
         #tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
         tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
+    if ctrl_type == 'Zf':
+        tau_control = AdmShaping.k_DC.dot(q - qh) + AdmShaping.Zf_acc.dot(ddq - ddqh)
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
