@@ -201,7 +201,8 @@ for k in range(conf.sim_steps):
         #tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
         tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
     if ctrl_type == 'Zf':
-        tau_control = AdmShaping.k_DC.dot(q - qh) + AdmShaping.Zf_acc.dot(ddq - ddqh)
+        #tau_control = AdmShaping.k_DC.dot(q - qh) + AdmShaping.Zf_acc.dot(ddq - ddqh)
+        tau_control = (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + AdmShaping.imp_kd.dot(dqh - qh)
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
@@ -212,6 +213,8 @@ for k in range(conf.sim_steps):
 
     # Joint Space Int - Human-Exo Interaction
     tau_int = jStiffness.dot(qh - q)
+    tau_int[0] = saturation(tau_int[0], SeaMax)
+    tau_int[1] = saturation(tau_int[1], SeaMax)
 
     # modelo do hum está super lento, investigar!!
     if interaction_enable:
