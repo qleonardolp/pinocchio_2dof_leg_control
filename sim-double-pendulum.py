@@ -23,8 +23,8 @@ def saturation(val, lmt):
 show_plots = True
 interaction_enable = True
 
-# Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC
-ctrl_type = 'Zf'
+# Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC | Zf
+ctrl_type = 'imp'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -41,9 +41,9 @@ des_inertia = np.array([[0.2, 0], [0, 0.2]])
 des_damping = np.array([[30., 0], [0, 90]])
 des_stiffness = np.array([[60, 0], [0, 180]])
 # Admittance Shaping Controller
-des_inertia = AdmShaping.I_des
+des_inertia = 0.05*AdmShaping.I_des
 des_damping = AdmShaping.imp_kd
-des_stiffness = AdmShaping.imp_kp
+des_stiffness = AdmShaping.imp_kp - AdmShaping.k_DC
 
 # Physical parameters
 jointsFriction = np.array([[1.1, 0], [0, 2.4]])
@@ -177,6 +177,15 @@ for k in range(conf.sim_steps):
     tau_sea[0] = saturation(tau_sea[0], SeaMax)
     tau_sea[1] = saturation(tau_sea[1], SeaMax)
 
+    # Joints Friction
+    tau_frict = jointsFriction.dot(dq)  # + 0.05*np.multiply(dq, dq)
+    tau_frict_h = jointsFriction.dot(dqh)
+
+    # Joint Space Int - Human-Exo Interaction
+    tau_int = jStiffness.dot(qh - q)
+    tau_int[0] = saturation(tau_int[0], SeaMax)
+    tau_int[1] = saturation(tau_int[1], SeaMax)
+
     # PD Control
     if ctrl_type == 'pd':
         tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq)
@@ -193,28 +202,21 @@ for k in range(conf.sim_steps):
     if ctrl_type == 'acc':
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
     # Impedance Control:
-    if ctrl_type == 'imp': # corrigir... ver video-aula sobre Impedance Control ...
+    if ctrl_type == 'imp':
         #tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + data_sim.nle
-        tau_control = des_stiffness.dot(qh - q) + des_damping.dot(dqh - dq) + data_sim.nle
+        inv_Id = np.linalg.inv(des_inertia)
+        tau_control = Mq.dot(inv_Id.dot(des_stiffness.dot(qh - q) + des_damping.dot(dqh - dq) + tau_int)) - tau_int
     # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
     if ctrl_type == 'kDC':
         #tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
         tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
     if ctrl_type == 'Zf':
-        #tau_control = AdmShaping.k_DC.dot(q - qh) + AdmShaping.Zf_acc.dot(ddq - ddqh)
-        tau_control = (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + AdmShaping.imp_kd.dot(dqh - qh)
+        #tau_control = Mq.dot( AdmShaping.I_des_inv.dot( -AdmShaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
+        #tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
+        tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + AdmShaping.imp_kd.dot(dqh - qh) + tau_int ) ) - tau_int
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
-
-    # Joints Friction
-    tau_frict = jointsFriction.dot(dq) #+ 0.05*np.multiply(dq, dq)
-    tau_frict_h = jointsFriction.dot(dqh)
-
-    # Joint Space Int - Human-Exo Interaction
-    tau_int = jStiffness.dot(qh - q)
-    tau_int[0] = saturation(tau_int[0], SeaMax)
-    tau_int[1] = saturation(tau_int[1], SeaMax)
 
     # modelo do hum está super lento, investigar!!
     if interaction_enable:

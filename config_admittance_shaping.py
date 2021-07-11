@@ -26,6 +26,7 @@ rho = Rdc * np.linalg.inv(Rpeaks) * hum_zetas * np.sqrt(np.eye(2) - hum_zetas*hu
 
 # From equations (17) - (19):
 I_des = hum_inertia * np.linalg.inv(Rdc * Romega*Romega)
+I_des_inv = np.linalg.inv(I_des)
 omg_des = np.diag(Romega * hum_omega_n)
 zeta_des = np.sqrt( 0.5*np.eye(2) - 0.5*np.sqrt(np.eye(2) - 4*rho*rho) )
 
