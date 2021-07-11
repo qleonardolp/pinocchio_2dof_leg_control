@@ -24,7 +24,7 @@ show_plots = True
 interaction_enable = True
 
 # Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC | Zf
-ctrl_type = 'imp'
+ctrl_type = 'Zf'
 Kp = np.eye(conf.Model.nv) * 380.0
 Kd = np.eye(conf.Model.nv) * 35.0
 
@@ -45,6 +45,12 @@ des_inertia = 0.05*AdmShaping.I_des
 des_damping = AdmShaping.imp_kd
 des_stiffness = AdmShaping.imp_kp - AdmShaping.k_DC
 
+# * Geometric parameters for joint error association *
+lgth_1 = 1.
+lgth_2 = 1.
+
+
+
 # Physical parameters
 jointsFriction = np.array([[1.1, 0], [0, 2.4]])
 
@@ -61,7 +67,8 @@ ampsxfreqs = np.multiply(amps, freqs)
 tStiffness = np.array([20.0, .0, .0])  # N/m
 tDamping = np.array([0.23, .0, .0])  # N.s/m
 # Joint Space Int Dyn
-jStiffness = np.eye(conf.Model.nv) * 104. # N/rad
+intK = 104.
+jStiffness = np.array([[intK, 0], [intK, intK]])  # N/rad, including here the joint angle error association
 jDamping = np.eye(conf.Model.nv) * 0.104  # N.s/rad
 Ksea = np.eye(conf.Model.nv) * 104.0  # N/rad
 SeaMax = 104.0 * pi * (7/180)
@@ -185,6 +192,9 @@ for k in range(conf.sim_steps):
     tau_int = jStiffness.dot(qh - q)
     tau_int[0] = saturation(tau_int[0], SeaMax)
     tau_int[1] = saturation(tau_int[1], SeaMax)
+    # angular error association:
+    tau_int_corr = np.array([0, (lgth_1/lgth_2) * (sin(q[0]) - sin(qh[0]))]) * intK
+    tau_int += tau_int_corr
 
     # PD Control
     if ctrl_type == 'pd':
@@ -203,16 +213,16 @@ for k in range(conf.sim_steps):
         tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
     # Impedance Control:
     if ctrl_type == 'imp':
-        #tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + data_sim.nle
+        # tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + data_sim.nle
         inv_Id = np.linalg.inv(des_inertia)
         tau_control = Mq.dot(inv_Id.dot(des_stiffness.dot(qh - q) + des_damping.dot(dqh - dq) + tau_int)) - tau_int
     # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
     if ctrl_type == 'kDC':
-        #tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
+        # tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
         tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
     if ctrl_type == 'Zf':
-        #tau_control = Mq.dot( AdmShaping.I_des_inv.dot( -AdmShaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
-        #tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
+        # tau_control = Mq.dot( AdmShaping.I_des_inv.dot( -AdmShaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
+        # tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
         tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + AdmShaping.imp_kd.dot(dqh - qh) + tau_int ) ) - tau_int
 
     # -- Human Body Control: -- #
@@ -242,6 +252,7 @@ for k in range(conf.sim_steps):
     #q += (dq_last + dq) * conf.dt * 0.5
     #dq_last = dq.copy()
 
+    int_2 = 104. * (qh[0] - q[0] + qh[1] - q[1])
     # Log variables
     downsmpl_log += 1
     if downsmpl_log > downsmpl_factor and show_plots:
@@ -256,7 +267,7 @@ for k in range(conf.sim_steps):
                                                         deg(ddqh[0]), deg(ddqh[1])]))
 
         # p_log = np.vstack((p_log, [p[0], p[2], p[0], p[2]])) # log x,z
-        p_log = np.vstack((p_log, [tau_int[0], hum_input[1], tau_control[0], tau_control[1]]))
+        p_log = np.vstack((p_log, [tau_int[0], tau_int[1], tau_int_corr[1], tau_control[1]]))
         #print(humMq)
         downsmpl_log = 0
     # endof logging
@@ -274,7 +285,8 @@ for k in range(conf.sim_steps):
 
 plt.figure()
 plt.plot(q_log[:, 0], p_log[:, 0])
-#plt.plot(q_log[:, 0], p_log[:, 2])
+plt.plot(q_log[:, 0], p_log[:, 1])
+plt.plot(q_log[:, 0], p_log[:, 2])
 plt.grid()
 plt.show()
 

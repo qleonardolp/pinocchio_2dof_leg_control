@@ -6,7 +6,7 @@ import config_double_pendulum as conf
 # Main Parameters
 r1 = 1 + conf.hum_body_mass[0] / 3.50  # (W_hum + W_exo)/W_exo, j1
 r2 = 1 + conf.hum_body_mass[1] / 1.75  # (W_hum + W_exo)/W_exo, j2
-Romega = np.array([[.5, .0], [.0, 0.5]])
+Romega = np.array([[2.0, .0], [.0, 1.7]])
 Rpeaks = np.array([[7., .0], [.0, 7.]])
 Rdc    = np.array([[r1, .0], [.0, r2]])
 
