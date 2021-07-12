@@ -8,6 +8,8 @@ developed using Ubuntu 20.04 with Python 3.8.10 installed.
 
 1. [Pinocchio installation](https://stack-of-tasks.github.io/pinocchio/download.html)
 2. [Gepetto installation](https://github.com/Gepetto/gepetto-viewer-corba)
+3. [Python Control Library](https://python-control.readthedocs.io/en/0.9.0/intro.html): You may need to upgrade your
+numpy and scipy packages first!
 
 ## Acknowledgement
 Special thanks to the original 
