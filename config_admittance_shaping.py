@@ -1,7 +1,9 @@
 import pinocchio as pin
-import numpy as np
-from math import *
 import config_double_pendulum as conf
+import matplotlib.pyplot as plt
+from control.matlab import *
+from math import *
+import numpy as np
 
 # Main Parameters
 r1 = 1 + conf.hum_body_mass[0] / 3.50  # (W_hum + W_exo)/W_exo, j1
@@ -55,3 +57,19 @@ exoShankJyy = conf.Model.inertias[2].toDynamicParameters()[6]
 Ie = np.array([[exoThighJyy, .0], [.0, exoShankJyy]])
 # loop gain for acceleration feedback ...
 Zf_acc = .07*Ie
+
+# Bode Plot
+Kd = np.diag(imp_kp - k_DC)[0]
+Bd = np.diag(imp_kd)[0]
+Md = np.diag(I_des)[0]
+imp1 = tf([Md, Bd, Kd], [1, 0])
+Kd = np.diag(imp_kp - k_DC)[1]
+Bd = np.diag(imp_kd)[1]
+Md = np.diag(I_des)[1]
+imp2 = tf([Md, Bd, Kd], [1, 0])
+print('Z_1(s) =')
+print(imp1)
+
+plt.figure('Bode')
+mag, phase, om = bode(imp1, imp2, logspace(-2, 2, 100), plot=True)
+plt.show(block=False)

@@ -6,9 +6,8 @@ import matplotlib.pyplot as plt
 from math import *
 import time
 import sys
-import config_double_pendulum as conf
-import config_admittance_shaping as AdmShaping
-
+# controllers_funct already imports conf and AdmShaping
+from controllers_funct import *
 
 def deg(arg):
     return degrees(arg)
@@ -23,33 +22,9 @@ def saturation(val, lmt):
 show_plots = True
 interaction_enable = True
 
-# Controller: # choose: pd | pdff | pdg | id | acc | imp | kDC | Zf
-ctrl_type = 'Zf'
-Kp = np.eye(conf.Model.nv) * 380.0
-Kd = np.eye(conf.Model.nv) * 35.0
-
-if ctrl_type == 'id':
-    Kp[1, 1] *= 0.25
-    Kd[1, 1] *= 0.30
-# print(Kp)
-# acceleration-based controller: PI(acc) -> PD(vel)
-velKp = np.array([[60, 0], [0, 40]])
-velKd = np.eye(conf.Model.nv) * 0.20
-
-# Impedance Controller:
-des_inertia = np.array([[0.2, 0], [0, 0.2]])
-des_damping = np.array([[30., 0], [0, 90]])
-des_stiffness = np.array([[60, 0], [0, 180]])
-# Admittance Shaping Controller
-des_inertia = 0.05*AdmShaping.I_des
-des_damping = AdmShaping.imp_kd
-des_stiffness = AdmShaping.imp_kp - AdmShaping.k_DC
-
 # * Geometric parameters for joint error association *
 lgth_1 = 1.
 lgth_2 = 1.
-
-
 
 # Physical parameters
 jointsFriction = np.array([[1.1, 0], [0, 2.4]])
@@ -85,7 +60,6 @@ dq  = np.zeros(conf.Model.nv)
 ddq = np.zeros(conf.Model.nv)
 q0  = q.copy()
 dq0 = 2 * pi * np.array([ampsxfreqs[0], ampsxfreqs[1]])
-q_rlx = np.array([pi, .0])
 
 # Human states, "qh", and properties (K, D)
 qh   = q0
@@ -196,39 +170,16 @@ for k in range(conf.sim_steps):
     tau_int_corr = np.array([0, (lgth_1/lgth_2) * (sin(q[0]) - sin(qh[0]))]) * intK
     tau_int += tau_int_corr
 
-    # PD Control
-    if ctrl_type == 'pd':
-        tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq)
-    # PD+Feedforward Control
-    if ctrl_type == 'pdff':
-        tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq) + np.multiply(np.diag(Mq), ddq_des)
-    # PD Control + Grav Compensation
-    if ctrl_type == 'pdg':
-        tau_control = Kp.dot(q_des - q) + Kd.dot(dq_des - dq) + grav
-    # Inverse Dynamics Control, data_sim.nle contains C + g
-    if ctrl_type == 'id':
-        tau_control = Mq.dot(ddq_des + Kp.dot(q_des - q) + Kd.dot(dq_des - dq)) + data_sim.nle
-    # Acceleration-based control
-    if ctrl_type == 'acc':
-        tau_control = Mq.dot(ddq_des) + velKp.dot(dq_des - dq) + velKd.dot(ddq_des - ddq) + data_sim.nle
-    # Impedance Control:
-    if ctrl_type == 'imp':
-        # tau_control = des_stiffness.dot(q_des - q) + des_damping.dot(dq_des - dq) + data_sim.nle
-        inv_Id = np.linalg.inv(des_inertia)
-        tau_control = Mq.dot(inv_Id.dot(des_stiffness.dot(qh - q) + des_damping.dot(dqh - dq) + tau_int)) - tau_int
-    # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
-    if ctrl_type == 'kDC':
-        # tau_control = AdmShaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
-        tau_control = AdmShaping.k_DC.dot(q - qh)   # compensa a posicao relativa ao usuario
-    if ctrl_type == 'Zf':
-        # tau_control = Mq.dot( AdmShaping.I_des_inv.dot( -AdmShaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
-        # tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
-        tau_control = Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + AdmShaping.imp_kd.dot(dqh - qh) + tau_int ) ) - tau_int
+    # Controller
+    UserStates = [qh, dqh, ddqh]
+    RobotStates = [q, dq, ddq]
+    DesiredStates = [q_des, dq_des, ddq_des]
+    tau_control = robotController(data_sim, DesiredStates, UserStates, RobotStates, tau_int)
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
 
-    # modelo do hum está super lento, investigar!!
+    # TODO: modelo do hum está super lento, investigar!!
     if interaction_enable:
         Tau   = tau_control - tau_frict + tau_int
         Tau_h = hum_input - tau_int
@@ -288,7 +239,7 @@ plt.plot(q_log[:, 0], p_log[:, 0])
 plt.plot(q_log[:, 0], p_log[:, 1])
 plt.plot(q_log[:, 0], p_log[:, 2])
 plt.grid()
-plt.show()
+plt.show(block=False)
 
 if show_plots:
     print("Simulation ended, here comes the plots...")
@@ -315,7 +266,7 @@ if show_plots:
     axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4])
     axs[1, 1].set_xlabel('time (s)')
     axs[1, 1].grid()
-    plt.show()
+    plt.show(block=False)
 
     fig, axs = plt.subplots(2, 2)
 
@@ -340,7 +291,7 @@ if show_plots:
     axs[1, 1].plot(q_log[:, 0], dqdes_log[:, 1])
     axs[1, 1].set_xlabel('time (s)')
     axs[1, 1].grid()
-    plt.show()
+    plt.show(block=True)
 # endof plots
 
 # FINALLY!!!
