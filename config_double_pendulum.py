@@ -7,6 +7,10 @@ import sys
 
 from pinocchio.visualize import GepettoVisualizer
 
+# From "Adjustments to McConville et al. and Young et al. body segment inertial parameters"
+# Using 70 Kg Female adult, Thigh and Leg:
+hum_body_mass = np.array([0.146*70, 0.048*70])
+
 DoF = 2  # number of pendulums
 Model = pin.Model()
 geom_model = pin.GeometryModel()
@@ -14,7 +18,7 @@ geom_model = pin.GeometryModel()
 parent_id = 0
 joint_placement = pin.SE3.Identity()
 #print(joint_placement.translation)
-body_mass = 3.50
+exo_body_mass = 2*hum_body_mass
 body_radius = 0.1
 
 shape0 = fcl.Sphere(body_radius)
@@ -29,7 +33,7 @@ for k in range(DoF):
     #Model.addJointFrame(joint_id)
 
     den = k + 1.0
-    body_inertia = pin.Inertia.FromSphere(body_mass / den, body_radius)  # second link with less inertia
+    body_inertia = pin.Inertia.FromSphere(exo_body_mass[k], body_radius)  # second link with less inertia
     body_placement = joint_placement.copy()
     body_placement.translation[2] = 1.
     Model.appendBodyToJoint(joint_id, body_inertia, body_placement)
@@ -64,9 +68,6 @@ parent_id = 0
 #base_placement = pin.XYZQUATToSE3([.0, .23, .0, 1.0, .0, .0, .0])
 base_placement = pin.SE3.Identity()
 joint_placement = pin.SE3.Identity()
-# From "Adjustments to McConville et al. and Young et al. body segment inertial parameters"
-# Using 70 Kg Female adult, Thigh and Leg:
-hum_body_mass = [0.146*70, 0.048*70]
 body_radius = 0.07
 
 shape0 = fcl.Sphere(body_radius)
@@ -132,12 +133,12 @@ viz.sceneName = "Double Pendulum Leg"
 # Simulation Config:
 dt = 0.001  # running simulation at 1000 Hz
 dt = 0.008
-sim_duration = 6  # simulation time period in sec
+sim_duration = 10  # simulation time period in sec
 step_input_time = sim_duration/2
 sim_steps = floor(sim_duration / dt)
 
 humStiffness = np.eye(humModel.nv) * 850.0
-humDamping = np.eye(humModel.nv) * 9.0 # cuidado, nao pode ser muito alto.
+humDamping = np.eye(humModel.nv) * 12.0 # cuidado, nao pode ser muito alto.
 
 # Model properties (should be set before Gepetto)
 #Model.lowerPositionLimit.fill(-pi)

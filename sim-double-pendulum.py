@@ -191,7 +191,7 @@ for k in range(conf.sim_steps):
     ddq  = pin.aba(conf.Model, data_sim, q, dq, Tau)
     ddqh = pin.aba(conf.humModel, data_hum, qh, dqh, Tau_h)
     # Mq_inv = np.linalg.inv(Mq)
-    # ddq = Mq_inv.dot(- data_sim.nle)
+    # ddq = Mq_inv.dot(Tau - data_sim.nle)
 
     dq += ddq*conf.dt
     q = pin.integrate(conf.Model, q, dq*conf.dt)
@@ -234,10 +234,13 @@ for k in range(conf.sim_steps):
     t += conf.dt
 # END OF SIMULATION
 
+IntRms1 = np.sqrt(np.mean(p_log[1:, 0]**2)) # dispensar o primeiro pois eh nan
+IntRms2 = np.sqrt(np.mean(p_log[1:, 1]**2))
+print('Interaction RMS: ' + str(IntRms1) + ', ' + str(IntRms2))
+
 plt.figure()
 plt.plot(q_log[:, 0], p_log[:, 0])
 plt.plot(q_log[:, 0], p_log[:, 1])
-plt.plot(q_log[:, 0], p_log[:, 2])
 plt.grid()
 plt.show(block=False)
 

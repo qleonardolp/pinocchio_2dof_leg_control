@@ -38,10 +38,9 @@ def robotController(robotData, DesiredStates, UserStates, RobotStates, tau_int):
     q_des, dq_des, ddq_des = DesiredStates[0], DesiredStates[1], DesiredStates[2]
 
     if ctrl_type == 'Zf':
-        # return Mq.dot( AdmShaping.I_des_inv.dot( -AdmShaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
-        # return Mq.dot( AdmShaping.I_des_inv.dot( (AdmShaping.imp_kp - AdmShaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
-        return Mq.dot(admshaping.I_des_inv.dot(
-            (admshaping.imp_kp - admshaping.k_DC).dot(qh - q) + admshaping.imp_kd.dot(dqh - dq) + tau_int)) - tau_int
+        # return Mq.dot( admshaping.I_des_inv.dot( -admshaping.k_DC.dot(qh - q) + tau_int ) ) - tau_int
+        # return Mq.dot( admshaping.I_des_inv.dot( (admshaping.imp_kp - admshaping.k_DC).dot(qh - q) + tau_int ) ) - tau_int
+        return Mq.dot(admshaping.I_des_inv.dot((admshaping.imp_kp - admshaping.k_DC).dot(qh - q) + admshaping.imp_kd.dot(dqh - dq) + tau_int)) - tau_int
 
     if ctrl_type == 'kDC':  # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
         # return admshaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)

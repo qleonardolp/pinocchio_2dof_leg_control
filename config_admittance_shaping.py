@@ -8,8 +8,10 @@ import numpy as np
 # Main Parameters
 r1 = 1 + conf.hum_body_mass[0] / 3.50  # (W_hum + W_exo)/W_exo, j1
 r2 = 1 + conf.hum_body_mass[1] / 1.75  # (W_hum + W_exo)/W_exo, j2
-Romega = np.array([[2.0, .0], [.0, 1.7]])
-Rpeaks = np.array([[7., .0], [.0, 7.]])
+# Romega = np.array([[1.7, .0], [.0, 1.7]])
+# Rpeaks = np.array([[7., .0], [.0, 7.]])
+Romega = np.array([[1., .0], [.0, 1.]])
+Rpeaks = np.array([[1., .0], [.0, 1.]])
 Rdc    = np.array([[r1, .0], [.0, r2]])
 
 # See toDynamicParameters() definition at
@@ -31,6 +33,7 @@ I_des = hum_inertia * np.linalg.inv(Rdc * Romega*Romega)
 I_des_inv = np.linalg.inv(I_des)
 omg_des = np.diag(Romega * hum_omega_n)
 zeta_des = np.sqrt( 0.5*np.eye(2) - 0.5*np.sqrt(np.eye(2) - 4*rho*rho) )
+print(' Id: ' + str(np.diag(I_des_inv)))
 
 # From the Integral Admittance definition, the desired Impedance Parameters are:
 imp_kp = I_des * np.square(omg_des)
