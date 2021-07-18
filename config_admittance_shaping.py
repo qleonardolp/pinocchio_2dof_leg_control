@@ -59,7 +59,7 @@ exoThighJyy = conf.Model.inertias[1].toDynamicParameters()[6]
 exoShankJyy = conf.Model.inertias[2].toDynamicParameters()[6]
 Ie = np.array([[exoThighJyy, .0], [.0, exoShankJyy]])
 # loop gain for acceleration feedback ...
-Zf_acc = .07*Ie
+Zf_acc = .32*Ie
 
 # Bode Plot
 Kd = np.diag(imp_kp - k_DC)[0]

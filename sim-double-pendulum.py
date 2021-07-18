@@ -42,7 +42,7 @@ ampsxfreqs = np.multiply(amps, freqs)
 tStiffness = np.array([20.0, .0, .0])  # N/m
 tDamping = np.array([0.23, .0, .0])  # N.s/m
 # Joint Space Int Dyn
-intK = 104.
+intK = 100*104.
 jStiffness = np.array([[intK, 0], [intK, intK]])  # N/rad, including here the joint angle error association
 jDamping = np.eye(conf.Model.nv) * 0.104  # N.s/rad
 Ksea = np.eye(conf.Model.nv) * 104.0  # N/rad
@@ -164,17 +164,17 @@ for k in range(conf.sim_steps):
 
     # Joint Space Int - Human-Exo Interaction
     tau_int = jStiffness.dot(qh - q)
-    tau_int[0] = saturation(tau_int[0], SeaMax)
-    tau_int[1] = saturation(tau_int[1], SeaMax)
     # angular error association:
     tau_int_corr = np.array([0, (lgth_1/lgth_2) * (sin(q[0]) - sin(qh[0]))]) * intK
     tau_int += tau_int_corr
+    #tau_int[0] = saturation(tau_int[0], SeaMax)
+    #tau_int[1] = saturation(tau_int[1], SeaMax)
 
     # Controller
     UserStates = [qh, dqh, ddqh]
     RobotStates = [q, dq, ddq]
     DesiredStates = [q_des, dq_des, ddq_des]
-    tau_control = robotController(data_sim, DesiredStates, UserStates, RobotStates, tau_int)
+    tau_control = robot_controller(data_sim, DesiredStates, UserStates, RobotStates, tau_int)
 
     # -- Human Body Control: -- #
     hum_input = humMq.dot(ddq_des + humStiffness.dot(q_des - qh) + humDamping.dot(dq_des - dqh)) + data_hum.nle
@@ -251,12 +251,12 @@ if show_plots:
     axs[0, 0].set_title('Robot q (deg)')
     axs[0, 0].plot(q_log[:, 0], q_log[:, 1])
     axs[0, 0].plot(humjstates_log[:, 0], humjstates_log[:, 1])
-    axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
+    # axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
     axs[0, 0].grid()
 
     axs[1, 0].plot(q_log[:, 0], q_log[:, 2])
     axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2])
-    axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
+    # axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
     axs[1, 0].set_xlabel('time (s)')
     axs[1, 0].grid()
 
