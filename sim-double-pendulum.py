@@ -234,9 +234,11 @@ for k in range(conf.sim_steps):
     t += conf.dt
 # END OF SIMULATION
 
-IntRms1 = np.sqrt(np.mean(p_log[1:, 0]**2)) # dispensar o primeiro pois eh nan
-IntRms2 = np.sqrt(np.mean(p_log[1:, 1]**2))
-print('Interaction RMS: ' + str(IntRms1) + ', ' + str(IntRms2))
+IntRms1 = (1/intK)*np.sqrt(np.mean(p_log[1:, 0]**2)) # dispensar o primeiro pois eh nan
+IntRms1 = deg(IntRms1)
+IntRms2 = (1/intK)*np.sqrt(np.mean(p_log[1:, 1]**2))
+IntRms2 = deg(IntRms2)
+print('Delta Ang RMS: ' + str(IntRms1) + ', ' + str(IntRms2))
 
 plt.figure()
 plt.plot(q_log[:, 0], p_log[:, 0])

@@ -24,12 +24,12 @@ des_stiffness = np.array([[60, 0], [0, 180]])
 q_rlx = np.array([pi, .0])
 
 # 2ndOrd Low-Pass-Filter Hf
-of = 0.4
-wf = 0.7
-ar = of**2 + wf**2
-hk = np.array([0, 0])
-hk1 = np.array([0, 0])
-hk2 = np.array([0, 0])
+of = admshaping.of
+wf = admshaping.wf
+ar = admshaping.ar
+hk = np.zeros(conf.Model.nv)
+hk1 = np.zeros(conf.Model.nv)
+hk2 = np.zeros(conf.Model.nv)
 
 
 def hf_transferfunct(new, act, last, llast):

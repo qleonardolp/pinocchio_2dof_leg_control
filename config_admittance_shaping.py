@@ -14,6 +14,11 @@ Romega = np.array([[1., .0], [.0, 1.]])
 Rpeaks = np.array([[1., .0], [.0, 1.]])
 Rdc    = np.array([[r1, .0], [.0, r2]])
 
+# 2ndOrd Low-Pass-Filter Hf
+of = 0.7
+wf = 1.7
+ar = of**2 + wf**2
+
 # See toDynamicParameters() definition at
 # https://gepettoweb.laas.fr/doc/stack-of-tasks/pinocchio/master/doxygen-html/classpinocchio_1_1InertiaTpl.html
 humThighJyy = conf.humModel.inertias[1].toDynamicParameters()[6]
@@ -75,4 +80,10 @@ print(imp1)
 
 plt.figure('Bode')
 mag, phase, om = bode(imp1, imp2, logspace(-2, 2, 100), plot=True)
+plt.show(block=False)
+
+Hf = tf([ar],[1, 2*of, ar])
+#print(Hf)
+plt.figure('Hf Bode')
+mag, phase, om = bode(Hf, logspace(-2, 2, 100), plot=True)
 plt.show(block=False)
