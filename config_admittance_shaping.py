@@ -16,7 +16,7 @@ Rdc    = np.array([[r1, .0], [.0, r2]])
 
 # 2ndOrd Low-Pass-Filter Hf
 of = 0.7
-wf = 1.7
+wf = 1.5
 ar = of**2 + wf**2
 
 # See toDynamicParameters() definition at
@@ -63,8 +63,25 @@ print("Desired Poles: " + str(poles))
 exoThighJyy = conf.Model.inertias[1].toDynamicParameters()[6]
 exoShankJyy = conf.Model.inertias[2].toDynamicParameters()[6]
 Ie = np.array([[exoThighJyy, .0], [.0, exoShankJyy]])
-# loop gain for acceleration feedback ...
-Zf_acc = .32*Ie
+
+# loop gain for acceleration feedback. Eq (93),(94) without K_L_hec:
+K_loop = np.eye(conf.Model.nv)
+pole_d = np.complex(thigh_jw[0], thigh_jw[1])
+cplx   = np.complex(pole_d.real + of, pole_d.imag + wf)
+K_L_cj = cplx * cplx.conjugate()  # norm
+cplx   = np.complex(pole_d.real + of, pole_d.imag - wf)
+K_L = cplx * cplx.conjugate()  # norm
+K_loop[0, 0] = (K_L*K_L_cj).real
+
+pole_d = np.complex(shank_jw[0], shank_jw[1])
+cplx   = np.complex(pole_d.real + of, pole_d.imag + wf)
+K_L_cj = cplx * cplx.conjugate()  # norm
+cplx   = np.complex(pole_d.real + of, pole_d.imag - wf)
+K_L = cplx * cplx.conjugate()  # norm
+K_loop[1, 1] = (K_L*K_L_cj).real
+# K_loop esta muito grande
+Zf_acc = np.array([[0.445, .0],[.0, 0.30]])*Ie
+# Zf_acc = K_loop*Ie
 
 # Bode Plot
 Kd = np.diag(imp_kp - k_DC)[0]

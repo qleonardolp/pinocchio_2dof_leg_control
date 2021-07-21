@@ -54,8 +54,8 @@ def robot_controller(robotData, DesiredStates, UserStates, RobotStates, tau_int)
 
     if ctrl_type == 'Zf':  # Admittance Shaping Controller
         filtered = hf_transferfunct(admshaping.Zf_acc.dot(ddq), hk, hk1, hk2)
-        # return admshaping.k_DC.dot(q - q_rlx) - admshaping.Zf_acc.dot(ddq)
-        return admshaping.k_DC.dot(q - q_rlx) - filtered
+        return admshaping.k_DC.dot(q - q_rlx) - admshaping.Zf_acc.dot(ddq)
+        # return admshaping.k_DC.dot(q - q_rlx) - filtered
 
     if ctrl_type == 'kDC':  # DC gain compensation from Admittance Shaping (remember: k_DC < 0)
         return admshaping.k_DC.dot(q - q_rlx) # compensa a posicao relaxada (pi, 0)
