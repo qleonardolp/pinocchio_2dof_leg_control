@@ -10,6 +10,7 @@ from pinocchio.visualize import GepettoVisualizer
 # From "Adjustments to McConville et al. and Young et al. body segment inertial parameters"
 # Using 70 Kg Female adult, Thigh and Leg:
 hum_body_mass = np.array([0.146*70, 0.048*70])
+WeightRatio = 2
 
 DoF = 2  # number of pendulums
 Model = pin.Model()
@@ -18,7 +19,7 @@ geom_model = pin.GeometryModel()
 parent_id = 0
 joint_placement = pin.SE3.Identity()
 #print(joint_placement.translation)
-exo_body_mass = 2*hum_body_mass
+exo_body_mass = WeightRatio*hum_body_mass
 body_radius = 0.1
 
 shape0 = fcl.Sphere(body_radius)
