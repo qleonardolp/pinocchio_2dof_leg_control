@@ -181,11 +181,11 @@ for k in range(conf.sim_steps):
 
     # TODO: modelo do hum está super lento, investigar!!
     if interaction_enable:
-        Tau   = tau_control - tau_frict + tau_int
+        Tau   = tau_control + tau_int
         Tau_h = hum_input - tau_int
     else:
         Tau = tau_control - tau_frict
-        Tau_h = hum_input
+        Tau_h = hum_input - tau_frict_h
 
     # Forward Dynamics (simulation)
     ddq  = pin.aba(conf.Model, data_sim, q, dq, Tau)
