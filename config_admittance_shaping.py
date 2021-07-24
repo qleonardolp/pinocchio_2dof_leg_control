@@ -64,22 +64,26 @@ exoThighJyy = conf.Model.inertias[1].toDynamicParameters()[6]
 exoShankJyy = conf.Model.inertias[2].toDynamicParameters()[6]
 Ie = np.array([[exoThighJyy, .0], [.0, exoShankJyy]])
 
-# loop gain for acceleration feedback. Eq (93),(94) without K_L_hec:
+# loop gain for acceleration feedback. Eq (93),(94) without K_L_hec and Eq(52)!:
 K_loop = np.eye(conf.Model.nv)
 pole_d = np.complex(thigh_jw[0], thigh_jw[1])
 cplx   = np.complex(pole_d.real + of, pole_d.imag + wf)
-K_L_cj = cplx * cplx.conjugate()  # norm
+K_L_cj = cplx * cplx.conjugate()  # norm^2
 cplx   = np.complex(pole_d.real + of, pole_d.imag - wf)
-K_L = cplx * cplx.conjugate()  # norm
-K_loop[0, 0] = (K_L*K_L_cj).real
+K_L = cplx * cplx.conjugate()  # norm^2
+K_loop[0, 0] = sqrt((K_L*K_L_cj).real)
 
 pole_d = np.complex(shank_jw[0], shank_jw[1])
 cplx   = np.complex(pole_d.real + of, pole_d.imag + wf)
 K_L_cj = cplx * cplx.conjugate()  # norm
 cplx   = np.complex(pole_d.real + of, pole_d.imag - wf)
 K_L = cplx * cplx.conjugate()  # norm
-K_loop[1, 1] = (K_L*K_L_cj).real
+K_loop[1, 1] = sqrt((K_L*K_L_cj).real)
+
+K_loop = K_loop / ar
+print(K_loop)
 # K_loop esta muito grande
+# Limite teorico Zf_acc = Ie
 Zf_acc = np.array([[0.445, .0],[.0, 0.30]])*Ie
 # Zf_acc = K_loop*Ie
 
