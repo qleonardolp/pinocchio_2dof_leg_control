@@ -6,8 +6,8 @@ from math import *
 import numpy as np
 
 # Main Parameters
-r1 = 1 + 1 / conf.WeightRatio  # (W_hum + W_exo)/W_exo = 1 + W_h/W_e = 1 + 1/WR, j1
-r2 = 1 + 1 / conf.WeightRatio  # (W_hum + W_exo)/W_exo, j2
+r1 = (1 + 2*conf.WeightRatio)/(1 + conf.WeightRatio)  #
+r2 = r1  #
 # Romega = np.array([[1.7, .0], [.0, 1.7]])
 # Rpeaks = np.array([[7., .0], [.0, 7.]])
 Romega = np.array([[1., .0], [.0, 1.]])

@@ -32,8 +32,8 @@ jointsFriction = np.array([[1.1, 0], [0, 2.4]])
 # Input
 input_type = 'sin'
 freqs = np.array([0.45, 0.4])
-amps = np.array([0.8, 0.3])
-phs = np.array([-.0 * pi * (90 / 180), .0 * pi * (25 / 180)])
+amps = np.array([0.8, 0.6])
+phs = np.array([.0 * pi * (90 / 180), pi * (45 / 180)])
 ampsxfreqs = np.multiply(amps, freqs)
 # print(ampsxfreqs)
 
@@ -252,23 +252,23 @@ if show_plots:
 
     axs[0, 0].set_title('Robot q (deg)')
     axs[0, 0].plot(q_log[:, 0], q_log[:, 1])
-    axs[0, 0].plot(humjstates_log[:, 0], humjstates_log[:, 1])
+    axs[0, 0].plot(humjstates_log[:, 0], humjstates_log[:, 1],'--')
     # axs[0, 0].plot(q_log[:, 0], deg(q0[0]) * np.ones(q_log.shape))
     axs[0, 0].grid()
 
     axs[1, 0].plot(q_log[:, 0], q_log[:, 2])
-    axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2])
+    axs[1, 0].plot(humjstates_log[:, 0], humjstates_log[:, 2],'--')
     # axs[1, 0].plot(q_log[:, 0], deg(q0[1]) * np.ones(q_log.shape))
     axs[1, 0].set_xlabel('time (s)')
     axs[1, 0].grid()
 
     axs[0, 1].set_title('Robot dq (deg/s)')
     axs[0, 1].plot(dq_log[:, 0], dq_log[:, 1])
-    axs[0, 1].plot(humjstates_log[:, 0], humjstates_log[:, 3])
+    axs[0, 1].plot(humjstates_log[:, 0], humjstates_log[:, 3],'--')
     axs[0, 1].grid()
 
     axs[1, 1].plot(dq_log[:, 0], dq_log[:, 2])
-    axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4])
+    axs[1, 1].plot(humjstates_log[:, 0], humjstates_log[:, 4],'--')
     axs[1, 1].set_xlabel('time (s)')
     axs[1, 1].grid()
     plt.show(block=False)
